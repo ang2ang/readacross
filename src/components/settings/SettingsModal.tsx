@@ -74,24 +74,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
                     <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                            <MessageSquare className="w-4 h-4 text-slate-400" />
-                            Translation Style
-                        </label>
-                        <select
-                            value={settings.promptStyle}
-                            onChange={(e) => settings.setPromptStyle(e.target.value as PromptStyle)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                        >
-                            <option value="General">General (Balanced)</option>
-                            <option value="Academic">Academic (Formal)</option>
-                            <option value="Philosophical">Philosophical (Nuanced)</option>
-                            <option value="Create">Creative (Literary)</option>
-                            <option value="Custom">Custom Prompt</option>
-                        </select>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                             <Languages className="w-4 h-4 text-slate-400" />
                             Target Language
                         </label>
@@ -107,6 +89,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             <option value="Deutsch">Deutsch</option>
                             <option value="Português">Português</option>
                             <option value="繁體中文">繁體中文</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                            <MessageSquare className="w-4 h-4 text-slate-400" />
+                            Translation Style
+                        </label>
+                        <select
+                            value={settings.promptStyle}
+                            onChange={(e) => settings.setPromptStyle(e.target.value as PromptStyle)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                        >
+                            <option value="General">General (Balanced)</option>
+                            <option value="Academic">Academic (Formal)</option>
+                            <option value="Philosophical">Philosophical (Nuanced)</option>
+                            <option value="Create">Creative (Literary)</option>
+                            <option value="Custom">Custom Prompt</option>
                         </select>
                     </div>
 
