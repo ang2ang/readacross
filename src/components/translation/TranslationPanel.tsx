@@ -82,12 +82,13 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
 
             let systemPrompt = '';
             const targetLang = settings.targetLanguage;
+            const formatInstruction = ` IMPORTANT: Preserve the original text's formatting structure - keep paragraph breaks, list items (use • for bullets), section headers, and any other structural elements intact. The translation should mirror the source text's layout so users can easily match translated content with the original.`;
             switch (settings.promptStyle) {
-                case 'Academic': systemPrompt = `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.`; break;
-                case 'Philosophical': systemPrompt = `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.`; break;
-                case 'Create': systemPrompt = `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.`; break;
-                case 'Custom': systemPrompt = settings.customPrompt; break;
-                case 'General': default: systemPrompt = `You are a professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.`; break;
+                case 'Academic': systemPrompt = `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.${formatInstruction}`; break;
+                case 'Philosophical': systemPrompt = `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.${formatInstruction}`; break;
+                case 'Create': systemPrompt = `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.${formatInstruction}`; break;
+                case 'Custom': systemPrompt = settings.customPrompt + formatInstruction; break;
+                case 'General': default: systemPrompt = `You are a professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.${formatInstruction}`; break;
             }
 
             let fullTranslation = '';
@@ -146,8 +147,12 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
         try {
             const pageText = await getPageText();
             if (pageText && pageText.trim().length > 0) {
-                // Remove excess whitespace/newlines for cleaner prompt
-                const cleanText = pageText.replace(/\s+/g, ' ').trim();
+                // Preserve paragraph structure: normalize multiple spaces to single space,
+                // but keep line breaks to maintain the original formatting
+                const cleanText = pageText
+                    .replace(/[ \t]+/g, ' ')  // Normalize horizontal whitespace only
+                    .replace(/\n{3,}/g, '\n\n')  // Limit consecutive newlines to 2
+                    .trim();
                 await handleTranslate(cleanText);
             } else {
                 setError('No text found on the current page.');
