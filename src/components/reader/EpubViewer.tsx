@@ -76,11 +76,6 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
                 useFileStore.getState().setSelection(cleanText);
             }
         });
-
-        // Clear selection when changing location
-        rendition.on('relocated', () => {
-            useFileStore.getState().setSelection('');
-        });
     };
 
     // Set extraction function in store

@@ -173,11 +173,14 @@ export const ReaderLayout: React.FC = () => {
                     autoTranslate={shouldAutoTranslate}
                     onAutoTranslateConsumed={() => setShouldAutoTranslate(false)}
                     getLatestSelection={() => {
-                        let text = window.getSelection()?.toString();
-                        if (!text || text.trim().length === 0) {
-                            text = useFileStore.getState().selection;
+                        // For EPUB, selection is stored in store since iframe selection isn't accessible
+                        const storeSelection = useFileStore.getState().selection;
+                        if (storeSelection && storeSelection.trim().length > 0) {
+                            return storeSelection;
                         }
-                        return text || '';
+                        // Fallback to window selection for PDF/Text
+                        const windowSelection = window.getSelection()?.toString() || '';
+                        return windowSelection;
                     }}
                 />
             </div>
