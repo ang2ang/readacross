@@ -1,19 +1,34 @@
-import { useState, useRef } from 'react';
-import { Settings, Minus, Plus, Type } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Settings, Minus, Plus, Type, Home } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { PDFViewer } from './PDFViewer';
 import { EpubViewer } from './EpubViewer';
+import { TextViewer } from './TextViewer';
+import { ImageTextViewer } from './ImageTextViewer';
 import { SettingsModal } from '../settings/SettingsModal';
 import { TranslationPanel } from '../translation/TranslationPanel';
+import { FileUploader } from '../upload/FileUploader';
 
 export const ReaderLayout: React.FC = () => {
-    const { file, fileType, setFile } = useFileStore();
+    const { file, fileType, inputMode, pastedText, images, pendingAutoTranslate, setFile, reset, setPendingAutoTranslate } = useFileStore();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [selectedText, setSelectedText] = useState<string | null>(null);
     const [isTranslationOpen, setIsTranslationOpen] = useState(false);
-    const [fontSize, setFontSize] = useState(100); // percentage: 100 = default
+    const [fontSize, setFontSize] = useState(100);
+    const [shouldAutoTranslate, setShouldAutoTranslate] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Determine if we have content to display
+    const hasContent = file || pastedText || images.length > 0;
+
+    // Auto-open translation panel and trigger translation when pendingAutoTranslate is set
+    useEffect(() => {
+        if (pendingAutoTranslate && hasContent) {
+            setIsTranslationOpen(true);
+            setShouldAutoTranslate(true);
+            setPendingAutoTranslate(false);
+        }
+    }, [pendingAutoTranslate, hasContent, setPendingAutoTranslate]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -24,12 +39,8 @@ export const ReaderLayout: React.FC = () => {
     const handleTranslateSelection = () => {
         let text = window.getSelection()?.toString();
         if (!text || text.trim().length === 0) {
-            // Try getting from store (Epub)
             text = useFileStore.getState().selection;
         }
-
-        // Always open the translation panel, even if no text is selected
-        // User can select text and click translate within the panel
         setSelectedText(text && text.trim().length > 0 ? text : '');
         setIsTranslationOpen(true);
     };
@@ -37,6 +48,29 @@ export const ReaderLayout: React.FC = () => {
     const handleFontSizeChange = (delta: number) => {
         setFontSize(prev => Math.min(150, Math.max(50, prev + delta)));
     };
+
+    const handleGoHome = () => {
+        reset();
+    };
+
+    const getContentLabel = () => {
+        if (fileType) return fileType.toUpperCase();
+        if (inputMode === 'text') return 'TEXT';
+        if (inputMode === 'image') return 'IMAGE';
+        return '';
+    };
+
+    const getContentName = () => {
+        if (file) return file.name;
+        if (inputMode === 'text') return 'Pasted Text';
+        if (inputMode === 'image') return `${images.length} Image${images.length > 1 ? 's' : ''}`;
+        return '';
+    };
+
+    // Show FileUploader if no content
+    if (!hasContent) {
+        return <FileUploader />;
+    }
 
     return (
         <div className="h-screen flex flex-col">
@@ -51,8 +85,8 @@ export const ReaderLayout: React.FC = () => {
             {/* Header */}
             <header className="h-14 border-b border-slate-200 bg-white flex items-center px-4 justify-between shrink-0 z-50 shadow-sm">
                 <div className="font-semibold text-slate-700 truncate max-w-sm flex items-center gap-2">
-                    <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded uppercase tracking-wider">{fileType}</span>
-                    <span className="truncate">{file?.name}</span>
+                    <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded uppercase tracking-wider">{getContentLabel()}</span>
+                    <span className="truncate">{getContentName()}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -107,15 +141,14 @@ export const ReaderLayout: React.FC = () => {
                         <Settings className="w-5 h-5" />
                     </button>
 
-                    {/* Upload Button */}
+                    {/* Home Button */}
                     <button
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={handleGoHome}
                         className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors font-medium border border-slate-200 cursor-pointer"
+                        title="Back to Home"
                     >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        Upload
+                        <Home className="w-4 h-4" />
+                        New
                     </button>
                 </div>
             </header>
@@ -127,6 +160,8 @@ export const ReaderLayout: React.FC = () => {
                     <div className="w-full max-w-5xl h-full shadow-sm bg-white">
                         {fileType === 'pdf' && <PDFViewer fontSize={fontSize} />}
                         {fileType === 'epub' && <EpubViewer fontSize={fontSize} />}
+                        {inputMode === 'text' && pastedText && <TextViewer fontSize={fontSize} />}
+                        {inputMode === 'image' && images.length > 0 && <ImageTextViewer fontSize={fontSize} />}
                     </div>
                 </div>
 
@@ -135,6 +170,8 @@ export const ReaderLayout: React.FC = () => {
                     originalText={selectedText || ''}
                     onClose={() => setIsTranslationOpen(false)}
                     isOpen={isTranslationOpen}
+                    autoTranslate={shouldAutoTranslate}
+                    onAutoTranslateConsumed={() => setShouldAutoTranslate(false)}
                     getLatestSelection={() => {
                         let text = window.getSelection()?.toString();
                         if (!text || text.trim().length === 0) {

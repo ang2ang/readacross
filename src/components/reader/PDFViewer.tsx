@@ -61,9 +61,22 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ fontSize = 100 }) => {
                         <ChevronLeft className="w-4 h-4" />
                         Previous
                     </button>
-                    <span className="text-sm text-slate-500 font-medium tabular-nums bg-slate-100 px-3 py-1 rounded-lg">
-                        {pageNumber} / {numPages}
-                    </span>
+                    <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-lg">
+                        <input
+                            type="number"
+                            min={1}
+                            max={numPages}
+                            value={pageNumber}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val) && val >= 1 && val <= numPages) {
+                                    setPageNumber(val);
+                                }
+                            }}
+                            className="w-14 text-center text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-400">/ {numPages}</span>
+                    </div>
                     <button
                         disabled={pageNumber >= numPages}
                         onClick={() => setPageNumber(prev => Math.min(numPages!, prev + 1))}
@@ -82,6 +95,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ fontSize = 100 }) => {
                         file={file}
                         onLoadSuccess={(p) => onDocumentLoadSuccess(p, p)}
                         onLoadError={(err) => console.error('PDF Load Error:', err)}
+                        onItemClick={({ pageNumber: targetPage }) => {
+                            if (targetPage && typeof targetPage === 'number') {
+                                setPageNumber(targetPage);
+                            }
+                        }}
                         loading={<div className="p-10 bg-white text-slate-500">Loading PDF...</div>}
                         error={<div className="p-10 bg-white text-red-500">Failed to load PDF. Please try another file.</div>}
                         className="flex flex-col gap-4"

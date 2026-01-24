@@ -19,6 +19,7 @@
     "react-pdf": "^10.3.0",
     "react-reader": "^2.0.15",
     "tailwind-merge": "^3.4.0",
+    "tesseract.js": "^7.0.0",
     "zustand": "^5.0.10"
   },
   "devDependencies": {

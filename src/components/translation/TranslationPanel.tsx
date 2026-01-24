@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square } from 'lucide-react';
+import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square, Copy, Check } from 'lucide-react';
 import OpenAI from 'openai';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useFileStore } from '../../store/useFileStore';
@@ -15,10 +15,12 @@ interface TranslationPanelProps {
     originalText: string;
     onClose: () => void;
     isOpen: boolean;
+    autoTranslate?: boolean;
+    onAutoTranslateConsumed?: () => void;
     getLatestSelection?: () => string;
 }
 
-export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isOpen, getLatestSelection }) => {
+export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isOpen, autoTranslate, onAutoTranslateConsumed, getLatestSelection }) => {
     const settings = useSettingsStore();
     const getPageText = useFileStore(state => state.getPageText);
     const [history, setHistory] = useState<TranslationEntry[]>([]);
@@ -30,6 +32,17 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
     const scrollRef = useRef<HTMLDivElement>(null);
     const entryIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const [copiedId, setCopiedId] = useState<number | null>(null);
+
+    const handleCopy = async (text: string, id: number) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    };
 
     // Auto-scroll to bottom when new translation is added
     useEffect(() => {
@@ -37,6 +50,18 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [currentTranslation, history.length]);
+
+    // Auto-translate when entering from paste flow
+    useEffect(() => {
+        if (autoTranslate && isOpen && getPageText && !isLoading) {
+            onAutoTranslateConsumed?.();
+            // Small delay to ensure getPageText is set up
+            const timer = setTimeout(() => {
+                handleTranslatePage();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [autoTranslate, isOpen, getPageText]);
 
     const toggleExpand = (id: number) => {
         setExpandedIds(prev => {
@@ -102,19 +127,25 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             }, { signal: controller.signal });
 
             for await (const chunk of response) {
+                // Check if aborted during streaming
+                if (controller.signal.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
+                }
                 const content = chunk.choices[0]?.delta?.content || '';
                 fullTranslation += content;
                 setCurrentTranslation(fullTranslation);
             }
 
-            // Add to history after completion
-            const newEntry: TranslationEntry = {
-                id: ++entryIdRef.current,
-                originalText: textToTranslate,
-                translation: fullTranslation,
-                timestamp: new Date(),
-            };
-            setHistory(prev => [...prev, newEntry]);
+            // Only add to history if not aborted
+            if (!controller.signal.aborted) {
+                const newEntry: TranslationEntry = {
+                    id: ++entryIdRef.current,
+                    originalText: textToTranslate,
+                    translation: fullTranslation,
+                    timestamp: new Date(),
+                };
+                setHistory(prev => [...prev, newEntry]);
+            }
             setCurrentTranslation('');
             setCurrentOriginalText('');
 
@@ -239,8 +270,19 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                         )}
 
                         {/* Translation Result */}
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100">
-                            <p className="whitespace-pre-wrap leading-relaxed text-slate-800 text-sm">{entry.translation}</p>
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100 relative group">
+                            <p className="whitespace-pre-wrap leading-relaxed text-slate-800 text-sm pr-8">{entry.translation}</p>
+                            <button
+                                onClick={() => handleCopy(entry.translation, entry.id)}
+                                className="absolute top-2 right-2 p-1.5 rounded-md bg-white/80 hover:bg-white border border-slate-200 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Copy translation"
+                            >
+                                {copiedId === entry.id ? (
+                                    <Check className="w-3.5 h-3.5 text-green-500" />
+                                ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                )}
+                            </button>
                         </div>
                     </div>
                 ))}
