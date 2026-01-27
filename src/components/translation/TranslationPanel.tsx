@@ -124,6 +124,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                     { role: 'user', content: textToTranslate }
                 ],
                 stream: true,
+                temperature: settings.temperature,
             }, { signal: controller.signal });
 
             for await (const chunk of response) {

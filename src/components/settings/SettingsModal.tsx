@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSettingsStore, type PromptStyle } from '../../store/useSettingsStore';
-import { X, Settings, Key, Server, MessageSquare, Languages } from 'lucide-react';
+import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer } from 'lucide-react';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -70,6 +70,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             onChange={(e) => settings.setBaseUrl(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                            <Thermometer className="w-4 h-4 text-slate-400" />
+                            Temperature
+                            <span className="ml-auto text-blue-600 font-semibold">{settings.temperature.toFixed(1)}</span>
+                        </label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={settings.temperature}
+                            onChange={(e) => settings.setTemperature(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <p className="text-xs text-slate-500">Lower = more deterministic, Higher = more creative</p>
                     </div>
 
                     <div className="space-y-2">

@@ -11,6 +11,7 @@ interface SettingsState {
     promptStyle: PromptStyle;
     customPrompt: string;
     targetLanguage: string;
+    temperature: number;
 
     setApiKey: (key: string) => void;
     setBaseUrl: (url: string) => void;
@@ -19,6 +20,7 @@ interface SettingsState {
     setPromptStyle: (style: PromptStyle) => void;
     setCustomPrompt: (prompt: string) => void;
     setTargetLanguage: (language: string) => void;
+    setTemperature: (temperature: number) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -31,6 +33,7 @@ export const useSettingsStore = create<SettingsState>()(
             promptStyle: 'General',
             customPrompt: '',
             targetLanguage: '简体中文',
+            temperature: 1.3,
 
             setApiKey: (apiKey) => set({ apiKey }),
             setBaseUrl: (baseUrl) => set({ baseUrl }),
@@ -43,6 +46,7 @@ export const useSettingsStore = create<SettingsState>()(
             setPromptStyle: (promptStyle) => set({ promptStyle }),
             setCustomPrompt: (customPrompt) => set({ customPrompt }),
             setTargetLanguage: (targetLanguage) => set({ targetLanguage }),
+            setTemperature: (temperature) => set({ temperature }),
         }),
         {
             name: 'readacross-settings',
