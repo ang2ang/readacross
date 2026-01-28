@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { Upload, Loader2, ArrowRight, AlertCircle, RefreshCw, Images } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Loader2, ArrowRight, AlertCircle, RefreshCw, Images } from 'lucide-react';
 import { createWorker } from 'tesseract.js';
 import { useFileStore } from '../../store/useFileStore';
 
@@ -17,6 +17,38 @@ export const ImageInputPanel: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const hasAutoExtracted = useRef(false);
+
+    const extractFirstImage = useCallback(async (imageUrl: string) => {
+        setIsExtracting(true);
+        setExtractProgress(0);
+        setError(null);
+
+        try {
+            const worker = await createWorker('eng+chi_sim+chi_tra', 1, {
+                logger: (m) => {
+                    if (m.status === 'recognizing text') {
+                        setExtractProgress(Math.round(m.progress * 100));
+                    }
+                },
+            });
+
+            const { data: { text } } = await worker.recognize(imageUrl);
+            await worker.terminate();
+
+            if (text.trim()) {
+                setExtractedText(text.trim());
+            } else {
+                setError('No text found in the first image. You can still proceed to view all images.');
+            }
+        } catch (err) {
+            console.error('OCR failed:', err);
+            setError('Failed to extract text. You can still proceed to view all images.');
+        } finally {
+            setIsExtracting(false);
+            setExtractProgress(0);
+        }
+    }, []);
 
     const handleImageFiles = useCallback((files: FileList | File[]) => {
         const newImages: ImageFile[] = [];
@@ -29,13 +61,23 @@ export const ImageInputPanel: React.FC = () => {
             }
         }
         if (newImages.length > 0) {
+            const isFirstBatch = imageFiles.length === 0;
             setImageFiles(prev => [...prev, ...newImages]);
-            setExtractedText(null);
             setError(null);
+
+            // Auto OCR first image when it's the first batch
+            if (isFirstBatch) {
+                hasAutoExtracted.current = true;
+                setExtractedText(null);
+                // Delay to allow state to update
+                setTimeout(() => {
+                    extractFirstImage(newImages[0].url);
+                }, 100);
+            }
         } else {
             setError('Please select image files (PNG, JPG, WEBP, GIF)');
         }
-    }, []);
+    }, [imageFiles.length, extractFirstImage]);
 
     const handleDrag = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -71,7 +113,7 @@ export const ImageInputPanel: React.FC = () => {
         }
     }, [handleImageFiles]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         document.addEventListener('paste', handlePaste);
         return () => document.removeEventListener('paste', handlePaste);
     }, [handlePaste]);
@@ -79,39 +121,6 @@ export const ImageInputPanel: React.FC = () => {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             handleImageFiles(e.target.files);
-        }
-    };
-
-    const handleExtractFirstImage = async () => {
-        if (imageFiles.length === 0) return;
-
-        setIsExtracting(true);
-        setExtractProgress(0);
-        setError(null);
-
-        try {
-            const worker = await createWorker('eng+chi_sim+chi_tra', 1, {
-                logger: (m) => {
-                    if (m.status === 'recognizing text') {
-                        setExtractProgress(Math.round(m.progress * 100));
-                    }
-                },
-            });
-
-            const { data: { text } } = await worker.recognize(imageFiles[0].url);
-            await worker.terminate();
-
-            if (text.trim()) {
-                setExtractedText(text.trim());
-            } else {
-                setError('No text found in the first image. You can still proceed to view all images.');
-            }
-        } catch (err) {
-            console.error('OCR failed:', err);
-            setError('Failed to extract text. You can still proceed to view all images.');
-        } finally {
-            setIsExtracting(false);
-            setExtractProgress(0);
         }
     };
 
@@ -129,6 +138,7 @@ export const ImageInputPanel: React.FC = () => {
         setImageFiles([]);
         setExtractedText(null);
         setError(null);
+        hasAutoExtracted.current = false;
     };
 
     const removeImage = (index: number) => {
@@ -136,6 +146,7 @@ export const ImageInputPanel: React.FC = () => {
         setImageFiles(prev => prev.filter((_, i) => i !== index));
         if (index === 0) {
             setExtractedText(null);
+            hasAutoExtracted.current = false;
         }
     };
 
@@ -239,18 +250,8 @@ export const ImageInputPanel: React.FC = () => {
                         />
                     </div>
 
-                    {/* OCR Controls / Results */}
+                    {/* OCR Status / Results */}
                     <div className="p-4">
-                        {!extractedText && !isExtracting && (
-                            <button
-                                onClick={handleExtractFirstImage}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                <Upload className="w-4 h-4" />
-                                Extract Text from First Image
-                            </button>
-                        )}
-
                         {isExtracting && (
                             <div className="text-center py-4">
                                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
@@ -264,7 +265,7 @@ export const ImageInputPanel: React.FC = () => {
                             </div>
                         )}
 
-                        {extractedText && (
+                        {extractedText && !isExtracting && (
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 mb-2">Extracted Text (First Image)</label>
@@ -282,22 +283,23 @@ export const ImageInputPanel: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Submit button - always visible once images are selected */}
-                        <button
-                            onClick={handleSubmit}
-                            disabled={isExtracting}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
-                        >
-                            {extractedText ? 'Start Translation' : 'View Images'}
-                            <ArrowRight className="w-4 h-4" />
-                        </button>
+                        {/* Submit button - always visible once images are selected and OCR is done */}
+                        {!isExtracting && (
+                            <button
+                                onClick={handleSubmit}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors"
+                            >
+                                {extractedText ? 'Start Translation' : 'View Images'}
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
 
             {/* Hint */}
             <p className="text-center text-sm text-slate-400 mt-4">
-                Supports PNG, JPG, WEBP, GIF • Select multiple images to translate in sequence
+                Supports PNG, JPG, WEBP, GIF • First image is auto-OCR'd
             </p>
         </div>
     );

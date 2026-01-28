@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Settings, Minus, Plus, Type, Home } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Settings, Minus, Plus, Type, Home, PlusCircle } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { PDFViewer } from './PDFViewer';
 import { EpubViewer } from './EpubViewer';
@@ -8,14 +8,19 @@ import { ImageTextViewer } from './ImageTextViewer';
 import { SettingsModal } from '../settings/SettingsModal';
 import { TranslationPanel } from '../translation/TranslationPanel';
 import { FileUploader } from '../upload/FileUploader';
+import { QuickPasteModal } from '../common/QuickPasteModal';
+import { Toast } from '../common/Toast';
+import Tesseract from 'tesseract.js';
 
 export const ReaderLayout: React.FC = () => {
-    const { file, fileType, inputMode, pastedText, images, pendingAutoTranslate, setFile, reset, setPendingAutoTranslate } = useFileStore();
+    const { file, fileType, inputMode, pastedText, images, pendingAutoTranslate, canUndo, setFile, reset, setPendingAutoTranslate, appendText, appendImage, undo, clearUndo } = useFileStore();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [selectedText, setSelectedText] = useState<string | null>(null);
     const [isTranslationOpen, setIsTranslationOpen] = useState(false);
     const [fontSize, setFontSize] = useState(100);
     const [shouldAutoTranslate, setShouldAutoTranslate] = useState(false);
+    const [isQuickPasteOpen, setIsQuickPasteOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Determine if we have content to display
@@ -29,6 +34,57 @@ export const ReaderLayout: React.FC = () => {
             setPendingAutoTranslate(false);
         }
     }, [pendingAutoTranslate, hasContent, setPendingAutoTranslate]);
+
+    // Keyboard shortcut: Ctrl/Cmd + V to quick paste
+    const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
+        // Skip if modal is open (let normal paste work in textarea)
+        if (isQuickPasteOpen) return;
+
+        // Only handle paste for text/image modes, not for file mode
+        if ((e.metaKey || e.ctrlKey) && e.key === 'v' && (inputMode === 'text' || inputMode === 'image')) {
+            // Prevent default paste behavior
+            e.preventDefault();
+
+            try {
+                if (inputMode === 'text') {
+                    // Paste text
+                    const text = await navigator.clipboard.readText();
+                    if (text && text.trim()) {
+                        appendText(text.trim());
+                        setToastMessage('Text added');
+                    }
+                } else if (inputMode === 'image') {
+                    // Paste image
+                    const items = await navigator.clipboard.read();
+                    for (const item of items) {
+                        const imageType = item.types.find(t => t.startsWith('image/'));
+                        if (imageType) {
+                            const blob = await item.getType(imageType);
+                            const url = URL.createObjectURL(blob);
+                            // Run OCR
+                            try {
+                                const result = await Tesseract.recognize(url, 'eng+chi_sim');
+                                const extractedText = result.data.text.trim() || null;
+                                appendImage({ url, extractedText });
+                                setToastMessage('Image added');
+                            } catch {
+                                appendImage({ url, extractedText: null });
+                                setToastMessage('Image added (OCR failed)');
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Paste failed:', err);
+            }
+        }
+    }, [inputMode, appendText, appendImage, isQuickPasteOpen]);
+
+    useEffect(() => {
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -51,6 +107,26 @@ export const ReaderLayout: React.FC = () => {
 
     const handleGoHome = () => {
         reset();
+    };
+
+    const handleQuickPasteText = (text: string) => {
+        appendText(text);
+        setToastMessage('Text added');
+    };
+
+    const handleQuickPasteImage = (imageUrl: string, extractedText: string | null) => {
+        appendImage({ url: imageUrl, extractedText });
+        setToastMessage('Image added');
+    };
+
+    const handleUndo = () => {
+        undo();
+        setToastMessage(null);
+    };
+
+    const handleToastClose = () => {
+        setToastMessage(null);
+        clearUndo();
     };
 
     const getContentLabel = () => {
@@ -90,6 +166,21 @@ export const ReaderLayout: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Quick Add Button - only for text/image modes */}
+                    {(inputMode === 'text' || inputMode === 'image') && (
+                        <>
+                            <button
+                                onClick={() => setIsQuickPasteOpen(true)}
+                                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all bg-green-50 text-green-600 hover:bg-green-100 cursor-pointer"
+                                title="Add more content (Ctrl+V)"
+                            >
+                                <PlusCircle className="w-4 h-4" />
+                                Add
+                            </button>
+                            <div className="h-6 w-px bg-slate-200" />
+                        </>
+                    )}
+
                     {/* Font Size Controls */}
                     <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
                         <button
@@ -186,6 +277,24 @@ export const ReaderLayout: React.FC = () => {
             </div>
 
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+            {/* Quick Paste Modal */}
+            <QuickPasteModal
+                isOpen={isQuickPasteOpen}
+                onClose={() => setIsQuickPasteOpen(false)}
+                onPasteText={handleQuickPasteText}
+                onPasteImage={handleQuickPasteImage}
+                currentMode={inputMode === 'image' ? 'image' : 'text'}
+            />
+
+            {/* Toast with Undo */}
+            {toastMessage && (
+                <Toast
+                    message={toastMessage}
+                    onUndo={canUndo ? handleUndo : undefined}
+                    onClose={handleToastClose}
+                />
+            )}
         </div>
     );
 };

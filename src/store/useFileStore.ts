@@ -7,6 +7,12 @@ interface ImageItem {
     extractedText: string | null;
 }
 
+interface UndoState {
+    pastedText: string | null;
+    images: ImageItem[];
+    currentImageIndex: number;
+}
+
 interface FileState {
     file: File | null;
     fileType: 'pdf' | 'epub' | null;
@@ -30,6 +36,20 @@ interface FileState {
     setInputMode: (mode: InputMode) => void;
     setPastedText: (text: string | null) => void;
 
+    // Append content (for quick paste in reader)
+    appendText: (text: string) => void;
+    appendImage: (image: ImageItem) => void;
+
+    // Track new content position for incremental translation
+    newContentStart: number | null;
+    clearNewContentStart: () => void;
+
+    // Undo support
+    undoState: UndoState | null;
+    canUndo: boolean;
+    undo: () => void;
+    clearUndo: () => void;
+
     // Auto-translate flag
     pendingAutoTranslate: boolean;
     setPendingAutoTranslate: (value: boolean) => void;
@@ -44,7 +64,7 @@ export const useFileStore = create<FileState>((set, get) => ({
         const name = file.name.toLowerCase();
         const type = name.endsWith('.pdf') ? 'pdf' : name.endsWith('.epub') ? 'epub' : null;
         if (type) {
-            set({ file, fileType: type, inputMode: 'file', pastedText: null, images: [], currentImageIndex: 0, pendingAutoTranslate: false });
+            set({ file, fileType: type, inputMode: 'file', pastedText: null, images: [], currentImageIndex: 0, pendingAutoTranslate: false, undoState: null, canUndo: false });
         }
     },
     selection: '',
@@ -66,7 +86,9 @@ export const useFileStore = create<FileState>((set, get) => ({
         file: null,
         fileType: null,
         pastedText: null,
-        pendingAutoTranslate: images.length > 0 && images[0].extractedText !== null
+        pendingAutoTranslate: images.length > 0 && images[0].extractedText !== null,
+        undoState: null,
+        canUndo: false
     }),
     setCurrentImageIndex: (currentImageIndex: number) => {
         const images = get().images;
@@ -80,7 +102,7 @@ export const useFileStore = create<FileState>((set, get) => ({
             images[index] = { ...images[index], extractedText: text };
             set({
                 images,
-                pendingAutoTranslate: index === get().currentImageIndex  // Auto-translate if updating current image
+                pendingAutoTranslate: index === get().currentImageIndex
             });
         }
     },
@@ -93,8 +115,76 @@ export const useFileStore = create<FileState>((set, get) => ({
         fileType: null,
         images: [],
         currentImageIndex: 0,
-        pendingAutoTranslate: true
+        pendingAutoTranslate: true,
+        undoState: null,
+        canUndo: false
     }),
+
+    // Append text (with separator)
+    appendText: (text: string) => {
+        const state = get();
+        // Save current state for undo
+        const undoState: UndoState = {
+            pastedText: state.pastedText,
+            images: state.images,
+            currentImageIndex: state.currentImageIndex
+        };
+        // Track where new content starts (after separator)
+        const newContentStart = state.pastedText ? state.pastedText.length + 7 : 0; // 7 = length of "\n\n---\n\n"
+        const newText = state.pastedText
+            ? `${state.pastedText}\n\n---\n\n${text}`
+            : text;
+        set({
+            pastedText: newText,
+            inputMode: 'text',
+            undoState,
+            canUndo: true,
+            pendingAutoTranslate: true,
+            newContentStart
+        });
+    },
+
+    // Append image (as new page)
+    appendImage: (image: ImageItem) => {
+        const state = get();
+        // Save current state for undo
+        const undoState: UndoState = {
+            pastedText: state.pastedText,
+            images: state.images,
+            currentImageIndex: state.currentImageIndex
+        };
+        const newImages = [...state.images, image];
+        set({
+            images: newImages,
+            currentImageIndex: newImages.length - 1, // Go to new image
+            inputMode: 'image',
+            undoState,
+            canUndo: true,
+            pendingAutoTranslate: image.extractedText !== null
+        });
+    },
+
+    // Undo support
+    undoState: null,
+    canUndo: false,
+    undo: () => {
+        const state = get();
+        if (state.undoState) {
+            set({
+                pastedText: state.undoState.pastedText,
+                images: state.undoState.images,
+                currentImageIndex: state.undoState.currentImageIndex,
+                undoState: null,
+                canUndo: false,
+                pendingAutoTranslate: false
+            });
+        }
+    },
+    clearUndo: () => set({ undoState: null, canUndo: false }),
+
+    // Track new content position
+    newContentStart: null,
+    clearNewContentStart: () => set({ newContentStart: null }),
 
     // Auto-translate
     pendingAutoTranslate: false,
@@ -109,6 +199,9 @@ export const useFileStore = create<FileState>((set, get) => ({
         pastedText: null,
         images: [],
         currentImageIndex: 0,
-        pendingAutoTranslate: false
+        pendingAutoTranslate: false,
+        undoState: null,
+        canUndo: false,
+        newContentStart: null
     }),
 }));

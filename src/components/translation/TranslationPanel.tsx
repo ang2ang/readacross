@@ -23,6 +23,11 @@ interface TranslationPanelProps {
 export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isOpen, autoTranslate, onAutoTranslateConsumed, getLatestSelection }) => {
     const settings = useSettingsStore();
     const getPageText = useFileStore(state => state.getPageText);
+    const selection = useFileStore(state => state.selection);
+    const newContentStart = useFileStore(state => state.newContentStart);
+    const clearNewContentStart = useFileStore(state => state.clearNewContentStart);
+    const pastedText = useFileStore(state => state.pastedText);
+    const inputMode = useFileStore(state => state.inputMode);
     const [history, setHistory] = useState<TranslationEntry[]>([]);
     const [currentTranslation, setCurrentTranslation] = useState('');
     const [currentOriginalText, setCurrentOriginalText] = useState('');
@@ -33,6 +38,28 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
     const entryIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [hasSelection, setHasSelection] = useState(false);
+
+    // Listen for selection changes to update button state in real-time
+    useEffect(() => {
+        const checkSelection = () => {
+            const storeSelection = useFileStore.getState().selection;
+            const windowSelection = window.getSelection()?.toString() || '';
+            setHasSelection(storeSelection.trim().length > 0 || windowSelection.trim().length > 0);
+        };
+
+        // Check initially
+        checkSelection();
+
+        // Listen for selection changes
+        document.addEventListener('selectionchange', checkSelection);
+        return () => document.removeEventListener('selectionchange', checkSelection);
+    }, []);
+
+    // Also update when store selection changes
+    useEffect(() => {
+        setHasSelection(selection.trim().length > 0 || (window.getSelection()?.toString()?.trim().length ?? 0) > 0);
+    }, [selection]);
 
     const handleCopy = async (text: string, id: number) => {
         try {
@@ -179,9 +206,21 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
         try {
             const pageText = await getPageText();
             if (pageText && pageText.trim().length > 0) {
+                let textToTranslate = pageText;
+
+                // If there's newly appended content (in text mode), only translate the new part
+                if (inputMode === 'text' && newContentStart !== null && pastedText) {
+                    const newContent = pastedText.slice(newContentStart);
+                    if (newContent.trim().length > 0) {
+                        textToTranslate = newContent;
+                    }
+                    // Clear the marker after using it
+                    clearNewContentStart();
+                }
+
                 // Preserve paragraph structure: normalize multiple spaces to single space,
                 // but keep line breaks to maintain the original formatting
-                const cleanText = pageText
+                const cleanText = textToTranslate
                     .replace(/[ \t]+/g, ' ')  // Normalize horizontal whitespace only
                     .replace(/\n{3,}/g, '\n\n')  // Limit consecutive newlines to 2
                     .trim();
@@ -214,16 +253,6 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                     AI Translation
                 </div>
                 <div className="flex items-center gap-1">
-                    <button
-                        onClick={handleTranslatePage}
-                        disabled={isLoading || !getPageText}
-                        className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Translate current page"
-                    >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        Page
-                    </button>
-                    <div className="w-px h-4 bg-blue-200 mx-1" />
                     {history.length > 0 && (
                         <button
                             onClick={clearHistory}
@@ -347,18 +376,41 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                         {settings.model}
                     </span>
                 </div>
-                <button
-                    onClick={() => isLoading ? handleStop() : handleTranslate()}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all ${isLoading
-                        ? 'bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200/50'
-                        }`}
-                >
-                    {isLoading ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                    {isLoading ? 'Stop Translation' : 'Translate'}
-                </button>
+                {isLoading ? (
+                    <button
+                        onClick={handleStop}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100"
+                    >
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        Stop
+                    </button>
+                ) : (
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => handleTranslate()}
+                            disabled={!hasSelection}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all ${hasSelection
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200/50'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
+                        >
+                            <Play className="w-4 h-4 fill-current" />
+                            Selection
+                        </button>
+                        <button
+                            onClick={handleTranslatePage}
+                            disabled={!getPageText}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all ${!getPageText
+                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200/50'
+                                }`}
+                        >
+                            <Play className="w-4 h-4 fill-current" />
+                            Page
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
-
