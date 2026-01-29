@@ -39,7 +39,7 @@ To add the intro video:
 Or drag & drop the video directly into this README when editing on GitHub
 -->
 
-https://github.com/user-attachments/assets/placeholder-video-id
+https://github.com/user-attachments/assets/153fa2ca-3a55-4dc0-a220-916d6eabaff4
 
 > *Introduction video showcasing ReadAcross features*
 
