@@ -135,7 +135,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [OpenAI](https://openai.com/) for the translation API
+- [DeepSeek](https://platform.deepseek.com/) / [OpenAI](https://platform.openai.com/) for LLM translation API
 - [react-pdf](https://github.com/wojtekmaj/react-pdf) for PDF rendering
 - [react-reader](https://github.com/gerhardsletten/react-reader) for EPUB support
 - [Tesseract.js](https://tesseract.projectnaptha.com/) for OCR capabilities
