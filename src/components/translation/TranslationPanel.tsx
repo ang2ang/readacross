@@ -41,11 +41,26 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
     const [hasSelection, setHasSelection] = useState(false);
 
     // Listen for selection changes to update button state in real-time
+    // Only consider selections within the reader area (not the translation panel)
     useEffect(() => {
         const checkSelection = () => {
             const storeSelection = useFileStore.getState().selection;
-            const windowSelection = window.getSelection()?.toString() || '';
-            setHasSelection(storeSelection.trim().length > 0 || windowSelection.trim().length > 0);
+
+            // Check if window selection is within the reader content (not translation panel)
+            let windowSelectionValid = false;
+            const windowSelection = window.getSelection();
+            if (windowSelection && windowSelection.toString().trim().length > 0) {
+                const anchorNode = windowSelection.anchorNode;
+                if (anchorNode) {
+                    // Check if selection is within reader-content area
+                    const readerContent = document.getElementById('reader-content');
+                    if (readerContent && readerContent.contains(anchorNode)) {
+                        windowSelectionValid = true;
+                    }
+                }
+            }
+
+            setHasSelection(storeSelection.trim().length > 0 || windowSelectionValid);
         };
 
         // Check initially
@@ -58,7 +73,18 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
 
     // Also update when store selection changes
     useEffect(() => {
-        setHasSelection(selection.trim().length > 0 || (window.getSelection()?.toString()?.trim().length ?? 0) > 0);
+        const windowSelection = window.getSelection();
+        let windowSelectionValid = false;
+        if (windowSelection && windowSelection.toString().trim().length > 0) {
+            const anchorNode = windowSelection.anchorNode;
+            if (anchorNode) {
+                const readerContent = document.getElementById('reader-content');
+                if (readerContent && readerContent.contains(anchorNode)) {
+                    windowSelectionValid = true;
+                }
+            }
+        }
+        setHasSelection(selection.trim().length > 0 || windowSelectionValid);
     }, [selection]);
 
     const handleCopy = async (text: string, id: number) => {

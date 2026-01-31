@@ -26,6 +26,13 @@ export const ReaderLayout: React.FC = () => {
     // Determine if we have content to display
     const hasContent = file || pastedText || images.length > 0;
 
+    // Reset font size when entering reader with new content
+    useEffect(() => {
+        if (hasContent) {
+            setFontSize(100);
+        }
+    }, [file, pastedText, images]);
+
     // Auto-open translation panel and trigger translation when pendingAutoTranslate is set
     useEffect(() => {
         if (pendingAutoTranslate && hasContent) {
@@ -247,7 +254,7 @@ export const ReaderLayout: React.FC = () => {
             {/* Main Content Area with Sidebar */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Reader Content */}
-                <div className="flex-1 overflow-auto bg-slate-100 flex justify-center">
+                <div id="reader-content" className="flex-1 overflow-auto bg-slate-100 flex justify-center">
                     <div className="w-full max-w-5xl h-full shadow-sm bg-white">
                         {fileType === 'pdf' && <PDFViewer fontSize={fontSize} />}
                         {fileType === 'epub' && <EpubViewer fontSize={fontSize} />}
