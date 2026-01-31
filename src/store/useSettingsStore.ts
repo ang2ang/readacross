@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export type Provider = 'deepseek' | 'openai';
 export type PromptStyle = 'General' | 'Academic' | 'Create' | 'Philosophical' | 'Custom';
 
 interface SettingsState {
-    provider: 'deepseek' | 'openai';
+    provider: Provider;
     apiKey: string;
     baseUrl: string;
     model: string;
@@ -15,7 +16,7 @@ interface SettingsState {
 
     setApiKey: (key: string) => void;
     setBaseUrl: (url: string) => void;
-    setProvider: (provider: 'deepseek' | 'openai') => void;
+    setProvider: (provider: Provider) => void;
     setModel: (model: string) => void;
     setPromptStyle: (style: PromptStyle) => void;
     setCustomPrompt: (prompt: string) => void;

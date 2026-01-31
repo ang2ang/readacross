@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileType, AlertCircle } from 'lucide-react';
+import { Upload, FileType, AlertCircle, Settings } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
 import { InputModeSelector } from './InputModeSelector';
 import { TextInputPanel } from './TextInputPanel';
 import { ImageInputPanel } from './ImageInputPanel';
+import { SettingsModal } from '../settings/SettingsModal';
 
 type InputMode = 'file' | 'text' | 'image';
 
@@ -12,6 +13,7 @@ export const FileUploader: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeMode, setActiveMode] = useState<InputMode>('file');
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const handleDrag = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -55,7 +57,16 @@ export const FileUploader: React.FC = () => {
     };
 
     return (
-        <div className="h-screen overflow-auto flex flex-col items-center bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-8">
+        <div className="h-screen overflow-auto flex flex-col items-center bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-8 relative">
+            {/* Settings Button - Top Right */}
+            <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="absolute top-4 right-4 p-2.5 rounded-lg bg-white/80 backdrop-blur-sm border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white hover:border-slate-300 transition-all shadow-sm"
+                title="Settings"
+            >
+                <Settings className="w-5 h-5" />
+            </button>
+
             <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold text-slate-800 mb-2">ReadAcross</h1>
                 <p className="text-slate-500">Upload a file, paste text, or paste an image to translate</p>
@@ -126,6 +137,10 @@ export const FileUploader: React.FC = () => {
 
             {activeMode === 'text' && <TextInputPanel />}
             {activeMode === 'image' && <ImageInputPanel />}
+
+            {/* Settings Modal */}
+            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </div>
     );
 };
+
