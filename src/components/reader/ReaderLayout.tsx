@@ -44,8 +44,8 @@ export const ReaderLayout: React.FC = () => {
 
     // Keyboard shortcut: Ctrl/Cmd + V to quick paste
     const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
-        // Skip if any modal/panel is open (let normal paste work in textarea/input fields)
-        if (isQuickPasteOpen || isSettingsOpen || isTranslationOpen) return;
+        // Skip if modal is open (let normal paste work in textarea/input fields)
+        if (isQuickPasteOpen || isSettingsOpen) return;
 
         // Only handle paste for text/image modes, not for file mode
         if ((e.metaKey || e.ctrlKey) && e.key === 'v' && (inputMode === 'text' || inputMode === 'image')) {
@@ -86,7 +86,7 @@ export const ReaderLayout: React.FC = () => {
                 console.error('Paste failed:', err);
             }
         }
-    }, [inputMode, appendText, appendImage, isQuickPasteOpen, isSettingsOpen, isTranslationOpen]);
+    }, [inputMode, appendText, appendImage, isQuickPasteOpen, isSettingsOpen]);
 
     useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);

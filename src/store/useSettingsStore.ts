@@ -4,13 +4,20 @@ import { persist } from 'zustand/middleware';
 export type Provider = 'deepseek' | 'openai';
 export type PromptStyle = 'General' | 'Academic' | 'Create' | 'Philosophical' | 'Custom';
 
+export interface CustomPrompt {
+    id: string;
+    name: string;
+    prompt: string;
+}
+
 interface SettingsState {
     provider: Provider;
     apiKey: string;
     baseUrl: string;
     model: string;
     promptStyle: PromptStyle;
-    customPrompt: string;
+    customPrompts: CustomPrompt[];
+    selectedCustomPromptId: string | null;
     targetLanguage: string;
     temperature: number;
 
@@ -19,20 +26,27 @@ interface SettingsState {
     setProvider: (provider: Provider) => void;
     setModel: (model: string) => void;
     setPromptStyle: (style: PromptStyle) => void;
-    setCustomPrompt: (prompt: string) => void;
     setTargetLanguage: (language: string) => void;
     setTemperature: (temperature: number) => void;
+
+    // Custom prompt management
+    addCustomPrompt: (prompt: Omit<CustomPrompt, 'id'>) => void;
+    updateCustomPrompt: (id: string, updates: Partial<Omit<CustomPrompt, 'id'>>) => void;
+    deleteCustomPrompt: (id: string) => void;
+    selectCustomPrompt: (id: string | null) => void;
+    getActiveCustomPrompt: () => string;
 }
 
 export const useSettingsStore = create<SettingsState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             provider: 'deepseek',
             apiKey: '',
             baseUrl: 'https://api.deepseek.com',
             model: 'deepseek-chat',
             promptStyle: 'General',
-            customPrompt: '',
+            customPrompts: [],
+            selectedCustomPromptId: null,
             targetLanguage: '简体中文',
             temperature: 1.3,
 
@@ -45,9 +59,47 @@ export const useSettingsStore = create<SettingsState>()(
             }),
             setModel: (model) => set({ model }),
             setPromptStyle: (promptStyle) => set({ promptStyle }),
-            setCustomPrompt: (customPrompt) => set({ customPrompt }),
             setTargetLanguage: (targetLanguage) => set({ targetLanguage }),
             setTemperature: (temperature) => set({ temperature }),
+
+            addCustomPrompt: (prompt) => set((state) => {
+                const newPrompt: CustomPrompt = {
+                    id: `prompt_${Date.now()}`,
+                    ...prompt,
+                };
+                return {
+                    customPrompts: [...state.customPrompts, newPrompt],
+                    selectedCustomPromptId: newPrompt.id,
+                };
+            }),
+
+            updateCustomPrompt: (id, updates) => set((state) => ({
+                customPrompts: state.customPrompts.map((p) =>
+                    p.id === id ? { ...p, ...updates } : p
+                ),
+            })),
+
+            deleteCustomPrompt: (id) => set((state) => {
+                const newPrompts = state.customPrompts.filter((p) => p.id !== id);
+                return {
+                    customPrompts: newPrompts,
+                    selectedCustomPromptId:
+                        state.selectedCustomPromptId === id
+                            ? (newPrompts.length > 0 ? newPrompts[0].id : null)
+                            : state.selectedCustomPromptId,
+                };
+            }),
+
+            selectCustomPrompt: (id) => set({ selectedCustomPromptId: id }),
+
+            getActiveCustomPrompt: () => {
+                const state = get();
+                if (state.promptStyle !== 'Custom' || !state.selectedCustomPromptId) {
+                    return '';
+                }
+                const prompt = state.customPrompts.find((p) => p.id === state.selectedCustomPromptId);
+                return prompt?.prompt ?? '';
+            },
         }),
         {
             name: 'readacross-settings',

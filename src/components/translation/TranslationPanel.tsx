@@ -134,11 +134,13 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
 
         if (!textToTranslate || textToTranslate.trim().length === 0) {
             setError(text ? 'Could not extract page text.' : 'Please select text to translate.');
+            setIsLoading(false);
             return;
         }
 
         if (!settings.apiKey) {
             setError('Please configure API Key in settings first.');
+            setIsLoading(false);
             return;
         }
 
@@ -165,7 +167,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                 case 'Academic': systemPrompt = `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.${formatInstruction}`; break;
                 case 'Philosophical': systemPrompt = `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.${formatInstruction}`; break;
                 case 'Create': systemPrompt = `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.${formatInstruction}`; break;
-                case 'Custom': systemPrompt = settings.customPrompt + formatInstruction; break;
+                case 'Custom': systemPrompt = settings.getActiveCustomPrompt() + formatInstruction; break;
                 case 'General': default: systemPrompt = `You are a professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.${formatInstruction}`; break;
             }
 
@@ -386,15 +388,30 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
                 <div className="flex items-center justify-between">
                     <div className="relative">
                         <select
-                            value={settings.promptStyle}
-                            onChange={(e) => settings.setPromptStyle(e.target.value as any)}
+                            value={settings.promptStyle === 'Custom' && settings.selectedCustomPromptId
+                                ? `custom:${settings.selectedCustomPromptId}`
+                                : settings.promptStyle}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                if (value.startsWith('custom:')) {
+                                    const promptId = value.replace('custom:', '');
+                                    settings.setPromptStyle('Custom');
+                                    settings.selectCustomPrompt(promptId);
+                                } else {
+                                    settings.setPromptStyle(value as any);
+                                }
+                            }}
                             className="appearance-none text-xs text-slate-600 font-medium pl-2 pr-6 py-1.5 bg-white rounded-md border border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer transition-colors"
                         >
                             <option value="General">General</option>
                             <option value="Academic">Academic</option>
                             <option value="Create">Creative</option>
                             <option value="Philosophical">Philosophical</option>
-                            <option value="Custom">Custom</option>
+                            {settings.customPrompts.length > 0 && settings.customPrompts.map(p => (
+                                <option key={p.id} value={`custom:${p.id}`}>
+                                    {p.name}
+                                </option>
+                            ))}
                         </select>
                         <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
