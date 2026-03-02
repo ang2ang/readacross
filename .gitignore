@@ -25,3 +25,7 @@ dist-ssr
 
 # Video project (Remotion)
 video/
+
+# Plasmo / Extension
+.plasmo/
+apps/extension/build/

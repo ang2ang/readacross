@@ -1,0 +1,44 @@
+{
+    "name": "@readacross/extension",
+    "displayName": "ReadAcross Extension",
+    "version": "0.0.1",
+    "description": "Immersive translation for ReadAcross",
+    "author": "ReadAcross",
+    "scripts": {
+        "dev": "PLASMO_HIDE_RELOAD=true plasmo dev",
+        "postdev": "node fix-icons.js",
+        "build": "plasmo build && node fix-icons.js",
+        "package": "plasmo package && node fix-icons.js",
+        "fix-icons": "node fix-icons.js"
+    },
+    "dependencies": {
+        "@plasmohq/messaging": "^0.6.2",
+        "@plasmohq/storage": "^1.13.0",
+        "@readacross/core": "workspace:*",
+        "franc-min": "^6.2.0",
+        "htmlparser2": "^10.1.0",
+        "lucide-react": "^0.562.0",
+        "plasmo": "^0.89.4",
+        "posthtml-parser": "^0.12.1",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1"
+    },
+    "devDependencies": {
+        "@types/chrome": "0.0.268",
+        "@types/node": "20.11.5",
+        "@types/react": "18.3.3",
+        "@types/react-dom": "18.3.0",
+        "sharp": "^0.34.5",
+        "typescript": "5.4.5"
+    },
+    "manifest": {
+        "host_permissions": [
+            "https://*/*"
+        ],
+        "permissions": [
+            "storage",
+            "scripting",
+            "activeTab"
+        ]
+    }
+}

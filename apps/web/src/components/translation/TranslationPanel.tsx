@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square, Copy, Check } from 'lucide-react';
-import OpenAI from 'openai';
+import { translateText, buildSystemPrompt } from '@readacross/core';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useFileStore } from '../../store/useFileStore';
 
@@ -154,43 +154,26 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
         abortControllerRef.current = controller;
 
         try {
-            const client = new OpenAI({
-                apiKey: settings.apiKey,
-                baseURL: settings.baseUrl,
-                dangerouslyAllowBrowser: true
-            });
-
-            let systemPrompt = '';
-            const targetLang = settings.targetLanguage;
-            const formatInstruction = ` IMPORTANT: Preserve the original text's formatting structure - keep paragraph breaks, list items (use • for bullets), section headers, and any other structural elements intact. The translation should mirror the source text's layout so users can easily match translated content with the original.`;
-            switch (settings.promptStyle) {
-                case 'Academic': systemPrompt = `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.${formatInstruction}`; break;
-                case 'Philosophical': systemPrompt = `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.${formatInstruction}`; break;
-                case 'Create': systemPrompt = `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.${formatInstruction}`; break;
-                case 'Custom': systemPrompt = settings.getActiveCustomPrompt() + formatInstruction; break;
-                case 'General': default: systemPrompt = `You are a professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.${formatInstruction}`; break;
-            }
+            const systemPrompt = buildSystemPrompt(
+                settings.promptStyle,
+                settings.targetLanguage,
+                settings.getActiveCustomPrompt()
+            );
 
             let fullTranslation = '';
-            const response = await client.chat.completions.create({
+            
+            await translateText(textToTranslate, {
+                apiKey: settings.apiKey,
+                baseUrl: settings.baseUrl,
                 model: settings.model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: textToTranslate }
-                ],
-                stream: true,
                 temperature: settings.temperature,
-            }, { signal: controller.signal });
-
-            for await (const chunk of response) {
-                // Check if aborted during streaming
-                if (controller.signal.aborted) {
-                    throw new DOMException('Aborted', 'AbortError');
+                systemPrompt,
+                signal: controller.signal,
+                onStream: (chunk) => {
+                    fullTranslation += chunk;
+                    setCurrentTranslation(fullTranslation);
                 }
-                const content = chunk.choices[0]?.delta?.content || '';
-                fullTranslation += content;
-                setCurrentTranslation(fullTranslation);
-            }
+            });
 
             // Only add to history if not aborted
             if (!controller.signal.aborted) {

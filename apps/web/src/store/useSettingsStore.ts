@@ -1,14 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-export type Provider = 'deepseek' | 'openai';
-export type PromptStyle = 'General' | 'Academic' | 'Create' | 'Philosophical' | 'Custom';
-
-export interface CustomPrompt {
-    id: string;
-    name: string;
-    prompt: string;
-}
+import type { Provider, PromptStyle, CustomPrompt } from '@readacross/core';
 
 interface SettingsState {
     provider: Provider;

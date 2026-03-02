@@ -1,0 +1,18 @@
+export type Provider = 'deepseek' | 'openai';
+export type PromptStyle = 'General' | 'Academic' | 'Create' | 'Philosophical' | 'Custom';
+
+export interface CustomPrompt {
+    id: string;
+    name: string;
+    prompt: string;
+}
+
+export interface TranslationOptions {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+    temperature: number;
+    systemPrompt: string;
+    signal?: AbortSignal;
+    onStream?: (chunk: string) => void;
+}

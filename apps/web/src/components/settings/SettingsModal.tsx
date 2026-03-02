@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSettingsStore, type PromptStyle, type Provider, type CustomPrompt } from '../../store/useSettingsStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
+import { type PromptStyle, type Provider, type CustomPrompt } from '@readacross/core';
 import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer, Plus, Trash2, Edit2, Check } from 'lucide-react';
 
 interface SettingsModalProps {
