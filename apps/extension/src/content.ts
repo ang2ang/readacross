@@ -14,6 +14,36 @@ const processedBlocks = new WeakSet<HTMLElement>()
 // Key: normalized original text, Value: translated text
 const translationCache = new Map<string, string>()
 
+// Concurrency Queue to prevent network errors (e.g. ERR_INSUFFICIENT_RESOURCES)
+// when massive text-dense pages (like OPML or raw XML) trigger hundreds of requests.
+class TranslationQueue {
+  private concurrency = 3;
+  private running = 0;
+  private queue: (() => void)[] = [];
+
+  add(task: () => Promise<void>) {
+    this.queue.push(() => {
+      this.running++;
+      task().finally(() => {
+        this.running--;
+        this.next();
+      });
+    });
+    this.next();
+  }
+
+  private next() {
+    if (this.running >= this.concurrency) return;
+    const task = this.queue.shift();
+    if (task) task();
+  }
+
+  clear() {
+    this.queue = [];
+  }
+}
+const apiQueue = new TranslationQueue()
+
 // State
 let isTranslationActive = false
 let translationState = { translated: 0, total: 0, active: false }
@@ -67,6 +97,8 @@ function injectTranslationStyles() {
       margin-bottom: 8px;
       border-left: 3px solid #8b5cf6;
       padding-left: 12px;
+      white-space: pre-wrap;
+      background: transparent;
       animation: readacross-fadein 0.3s ease;
     }
     .readacross-error {
@@ -88,21 +120,53 @@ function injectTranslationStyles() {
 }
 
 function createLoadingPlaceholder(block: HTMLElement): HTMLElement {
-  const placeholder = document.createElement("div")
+  const placeholder = document.createElement("span")
   placeholder.className = "readacross-loading"
   placeholder.textContent = "Translating..."
   placeholder.setAttribute("data-readacross-type", "loading")
+  placeholder.style.display = "block"
 
-  if (block.nextSibling) {
-    block.parentNode?.insertBefore(placeholder, block.nextSibling)
-  } else {
-    block.parentNode?.appendChild(placeholder)
-  }
+  block.appendChild(placeholder)
+
   return placeholder
 }
 
-function normalizeText(text: string): string {
-  return text.trim().replace(/\s+/g, ' ')
+// Quick extraction for determining if text expanded (no DOM reflows)
+function getBlockTextWithoutTranslation(el: HTMLElement): string {
+  let text = '';
+  for (let i = 0; i < el.childNodes.length; i++) {
+    const child = el.childNodes[i];
+    if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).hasAttribute('data-readacross-type')) {
+      continue;
+    }
+    text += child.textContent || '';
+  }
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+// Precise extraction that preserves \n natively (triggers layout render, use sparingly, e.g. translation payload)
+function getOriginalInnerText(el: HTMLElement): string {
+  const wrappers = el.querySelectorAll<HTMLElement>(':scope > [data-readacross-type]');
+  const displays: string[] = [];
+
+  // Temporarily hide injected translations to get accurate rendered original text
+  wrappers.forEach(w => {
+    displays.push(w.style.display);
+    w.style.display = 'none';
+  });
+
+  // Calculate actual rendered text (preserves visually rendered newlines nicely, ignores hidden elements)
+  let text = el.innerText || '';
+
+  // Restore translations display
+  wrappers.forEach((w, i) => {
+    w.style.display = displays[i];
+  });
+
+  // Remove excessive consecutive newlines
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  return text;
 }
 
 /**
@@ -134,16 +198,50 @@ function isPureUrl(text: string): boolean {
   return /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(:\d+)?(\/.*|…|\.\.\.)?$/i.test(t)
 }
 
+/**
+ * Returns true if the text is just a date, time, or social media stats (views, likes)
+ */
+function isSocialStatsOrDateTime(text: string): boolean {
+  const t = text.trim()
+  if (t.length === 0 || t.length > 100) return false
+
+  // Strip directional marks, zero-width chars, spaces, numbers, common symbols
+  // \u200E (LRM), \u200F (RLM), \u202A-\u202E (directional embedding), \u200B-\u200D (zero-width)
+  const structuralChars = /[\s\r\n\u200B-\u200F\u202A-\u202E\uFEFF]/g
+  let remaining = t.replace(structuralChars, '')
+
+  // Strip common social media keywords and months (longest strings first to prevent partial matches)
+  const utilityWords = /(Views|View|Likes|Like|Reposts|Repost|Retweets|Retweet|Quotes|Quote|Bookmarks|Bookmark|ago|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|AM|PM)/gi
+  remaining = remaining.replace(utilityWords, '')
+
+  // Strip numbers and common punctuation/number separators
+  const utilityChars = /[0-9:,\.\sKMB·\/\-]/gi
+  remaining = remaining.replace(utilityChars, '')
+
+  // If there are only a couple of letters left (e.g. "s" or a stray localized char), it's probably purely utility
+  return remaining.trim().length <= 2
+}
+
 async function translateBlock(block: HTMLElement) {
   if (processedBlocks.has(block)) return
 
-  const text = block.innerText?.trim()
-  if (!text || text.length < 10) return
+  const rawText = getOriginalInnerText(block)
+  if (!rawText || rawText.length < 10) return
 
-  const normalizedKey = normalizeText(text)
+  // Safety: refuse to translate absurdly large blocks (single API payload sanity limit)
+  if (rawText.length > 8000) {
 
-  // --- Skip pure proper-name blocks (author names, account display names) or pure URLs ---
-  if (isPureProperName(text) || isPureUrl(text)) {
+    processedBlocks.add(block)
+    block.setAttribute('data-readacross-processed', 'true')
+    return
+  }
+
+  const normalizedKey = rawText
+  const text = rawText // alias used below
+
+  // --- Skip pure proper-name blocks, URLs, or date/stats blocks ---
+  if (isPureProperName(text) || isPureUrl(text) || isSocialStatsOrDateTime(text)) {
+
     processedBlocks.add(block)
     block.setAttribute('data-readacross-processed', 'true')
     block.setAttribute('data-readacross-original-length', text.length.toString())
@@ -157,6 +255,11 @@ async function translateBlock(block: HTMLElement) {
   processedBlocks.add(block)
   block.setAttribute('data-readacross-processed', 'true')
   block.setAttribute('data-readacross-original-length', text.length.toString())
+
+  // Mark all descendants as processed so we don't translate them separately
+  block.querySelectorAll('*').forEach(el => {
+    processedBlocks.add(el as HTMLElement)
+  })
 
   // --- Local Language Detection ---
   // A mapping from extension Target Language strings to Franc ISO 639-3 codes
@@ -192,87 +295,112 @@ async function translateBlock(block: HTMLElement) {
     return
   }
 
-  // Create loading shimmer
+  // Create loading shimmer immediately
   const placeholder = createLoadingPlaceholder(block)
 
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "TRANSLATE_TEXT",
-      text: text
-    })
+  // Queue the actual API request to prevent dropping sockets on massive pages
+  apiQueue.add(async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "TRANSLATE_TEXT",
+        text: text
+      })
 
-    // Remove loading placeholder
-    if (placeholder.parentNode) {
-      placeholder.parentNode.removeChild(placeholder)
-    }
-
-    if (response?.error) {
-      console.warn("ReadAcross Error:", response.error)
-      injectErrorIndicator(block, response.error)
-      return
-    }
-
-    if (response?.result) {
-      if (response.result.trim() === "[NO_TRANSLATE]") {
-        // Cache it to prevent future API calls, but don't inject any DOM elements
-        translationCache.set(normalizedKey, "[NO_TRANSLATE]")
-      } else {
-        translationCache.set(normalizedKey, response.result)
-        injectBlockTranslation(block, response.result)
+      // Remove loading placeholder
+      if (placeholder.parentNode) {
+        placeholder.parentNode.removeChild(placeholder)
       }
+
+      if (response?.error) {
+        console.warn("ReadAcross Error:", response.error)
+        injectErrorIndicator(block, response.error)
+        return
+      }
+
+      if (response?.result) {
+        if (response.result.trim() === "[NO_TRANSLATE]") {
+          // Cache it to prevent future API calls, but don't inject any DOM elements
+          translationCache.set(normalizedKey, "[NO_TRANSLATE]")
+        } else {
+          translationCache.set(normalizedKey, response.result)
+          injectBlockTranslation(block, response.result)
+        }
+      }
+    } catch (err: any) {
+      if (placeholder.parentNode) {
+        placeholder.parentNode.removeChild(placeholder)
+      }
+      if (err?.message?.includes("Extension context invalidated")) {
+        // Silently fail if extension was reloaded/updated by the developer
+        return
+      }
+      console.error("ReadAcross Messaging error:", err)
+      injectErrorIndicator(block, err?.message || "Translation failed")
+    } finally {
+      translationState.translated++
+      reportProgress()
     }
-  } catch (err) {
-    if (placeholder.parentNode) {
-      placeholder.parentNode.removeChild(placeholder)
-    }
-    console.error("ReadAcross Messaging error:", err)
-    injectErrorIndicator(block, "Translation failed")
-  } finally {
-    translationState.translated++
-    reportProgress()
-  }
+  })
 }
 
 function injectBlockTranslation(originalBlock: HTMLElement, translatedText: string) {
   if (translatedText === "[NO_TRANSLATE]") return
 
   // Check if translation already exists specifically for this block to avoid duplicates
-  if (originalBlock.nextElementSibling?.getAttribute('data-readacross-type') === 'translation') {
+  if (originalBlock.querySelector(':scope > [data-readacross-type="translation"]')) {
     return
   }
 
-  const wrapper = document.createElement("div")
+  // Clean up any lingering loading placeholders
+  originalBlock.querySelectorAll(':scope > [data-readacross-type="loading"]').forEach(el => el.remove())
+
+  const wrapper = document.createElement("span")
   wrapper.className = "readacross-translation"
   wrapper.textContent = translatedText
   wrapper.setAttribute("data-readacross-type", "translation")
+  wrapper.style.display = "block"
 
-  if (originalBlock.nextSibling) {
-    originalBlock.parentNode?.insertBefore(wrapper, originalBlock.nextSibling)
-  } else {
-    originalBlock.parentNode?.appendChild(wrapper)
-  }
+  originalBlock.appendChild(wrapper)
 }
 
 function injectErrorIndicator(originalBlock: HTMLElement, errorMsg: string) {
-  if (originalBlock.nextElementSibling?.getAttribute('data-readacross-type') === 'error') {
+  if (originalBlock.querySelector(':scope > [data-readacross-type="error"]')) {
     return
   }
 
-  const wrapper = document.createElement("div")
+  const wrapper = document.createElement("span")
   wrapper.className = "readacross-error"
   wrapper.textContent = `⚠ ${errorMsg}`
   wrapper.setAttribute("data-readacross-type", "error")
+  wrapper.style.display = "block"
 
-  if (originalBlock.nextSibling) {
-    originalBlock.parentNode?.insertBefore(wrapper, originalBlock.nextSibling)
-  } else {
-    originalBlock.parentNode?.appendChild(wrapper)
-  }
+  originalBlock.appendChild(wrapper)
 }
 
 // -----------------------------------------------------------------------------
 // Continuous Global Translation Engine
 // -----------------------------------------------------------------------------
+
+const INLINE_TAGS = new Set([
+  'a', 'abbr', 'acronym', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'dfn',
+  'em', 'i', 'kbd', 'mark', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'small', 'span',
+  'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr'
+])
+
+// Never walk past these when finding the text block container
+const WALK_STOP_TAGS = new Set(['body', 'html'])
+
+function getClosestBlockElement(el: HTMLElement): HTMLElement {
+  let current = el
+  while (current && current.parentElement && INLINE_TAGS.has(current.tagName.toLowerCase())) {
+    // Don't walk past body/html — they are too broad to be a translation block
+    if (WALK_STOP_TAGS.has(current.parentElement.tagName.toLowerCase())) {
+      break
+    }
+    current = current.parentElement
+  }
+  return current
+}
 
 function getTranslatableBlocks(root: Node): HTMLElement[] {
   const nodesToTranslate: HTMLElement[] = []
@@ -282,18 +410,14 @@ function getTranslatableBlocks(root: Node): HTMLElement[] {
     NodeFilter.SHOW_TEXT,
     {
       acceptNode: function (node) {
-        if (!node.textContent || node.textContent.trim().length <= 15) {
+        if (!node.textContent || node.textContent.trim().length === 0) {
           return NodeFilter.FILTER_REJECT
         }
         const parent = node.parentElement
         if (!parent) return NodeFilter.FILTER_REJECT
 
-        const tagName = parent.tagName.toLowerCase()
-        if (['script', 'style', 'noscript', 'code'].includes(tagName)) return NodeFilter.FILTER_REJECT
-
-        // Skip our injected elements
-        if (parent.hasAttribute('data-readacross-type') ||
-          parent.closest('[data-readacross-type]')) {
+        // Skip hidden/system elements and page chrome (nav, footer, header)
+        if (parent.closest('script, style, noscript, code, [data-readacross-type], footer, nav, header, [role="navigation"], [role="contentinfo"], [role="banner"]')) {
           return NodeFilter.FILTER_REJECT
         }
 
@@ -304,41 +428,40 @@ function getTranslatableBlocks(root: Node): HTMLElement[] {
 
   let currentNode = walker.nextNode()
   while (currentNode) {
-    const parent = currentNode.parentElement
-    if (parent && !nodesToTranslate.includes(parent)) {
-      if (parent.getAttribute('data-readacross-processed') !== 'true') {
-        // Not processed yet
-        if (!processedBlocks.has(parent)) {
-          nodesToTranslate.push(parent)
-        }
-      } else {
-        // Already processed. Check if text expanded significantly (e.g., clicking "Show more")
-        const oldLength = parseInt(parent.getAttribute('data-readacross-original-length') || '0', 10)
-        const currentText = parent.textContent || ''
-        const newLength = currentText.trim().length
-
-        if (newLength > oldLength + 15) {
-          // Text expanded! Reset state to force re-translation
-          parent.removeAttribute('data-readacross-processed')
-          processedBlocks.delete(parent)
-
-          // Remove old translation if it exists
-          const next = parent.nextElementSibling
-          if (next && next.getAttribute('data-readacross-type') === 'translation') {
-            next.remove()
+    const rawParent = currentNode.parentElement
+    if (rawParent) {
+      const parent = getClosestBlockElement(rawParent)
+      if (!nodesToTranslate.includes(parent)) {
+        if (parent.getAttribute('data-readacross-processed') !== 'true') {
+          // Not processed yet
+          if (!processedBlocks.has(parent)) {
+            nodesToTranslate.push(parent)
           }
+        } else {
+          // Already processed. Check if text expanded significantly (e.g., clicking "Show more")
+          // Use quick textContent extraction to avoid layout thrashing during mutation cycle
+          const oldLength = parseInt(parent.getAttribute('data-readacross-original-length') || '0', 10)
+          const currentText = getBlockTextWithoutTranslation(parent)
+          const newLength = currentText.length
 
-          nodesToTranslate.push(parent)
+          if (newLength > oldLength + 15) {
+            // Text expanded! Reset state to force re-translation
+            parent.removeAttribute('data-readacross-processed')
+            processedBlocks.delete(parent)
+
+            // Remove old translations if they exist
+            const wrappers = parent.querySelectorAll(':scope > [data-readacross-type]')
+            wrappers.forEach(w => w.remove())
+
+            nodesToTranslate.push(parent)
+          }
         }
       }
     }
     currentNode = walker.nextNode()
   }
 
-  // Filter deepest blocks
-  return nodesToTranslate.filter(el => {
-    return !nodesToTranslate.some(other => el !== other && el.contains(other))
-  })
+  return nodesToTranslate
 }
 
 function observeDOMChanges() {
@@ -386,8 +509,17 @@ function observeDOMChanges() {
 }
 
 function scanAndQueueTranslation(root: Node) {
-  const newBlocks = getTranslatableBlocks(root)
+  let newBlocks = getTranslatableBlocks(root)
+
   if (newBlocks.length === 0) return
+
+  // Filter out blocks that are children of another block in this same batch
+  // This ensures we prioritize the ancestor for better translation context
+  newBlocks = newBlocks.filter(el => {
+    return !newBlocks.some(other => el !== other && other.contains(el))
+  })
+
+
 
   translationState.total += newBlocks.length
   translationState.active = true
@@ -401,25 +533,23 @@ function scanAndQueueTranslation(root: Node) {
 function startPeriodicRecovery() {
   if (recoveryInterval) clearInterval(recoveryInterval)
 
-  // Every 2 seconds, find processed blocks that have lost their translation siblings
-  // (Common in React/View Virtual DOMs like Twitter/X)
+  // Every 2 seconds, find processed blocks that have lost their translation child
+  // due to virtual DOM recycling (like Twitter) and instantly restore them from cache.
   recoveryInterval = window.setInterval(() => {
     if (!isTranslationActive) return
 
-    // Find all blocks we marked as processed
-    const processedEls = document.querySelectorAll('[data-readacross-processed="true"]')
-    processedEls.forEach(el => {
-      const block = el as HTMLElement
-      // Check if it lost its translation sibling
-      const nextSibling = block.nextElementSibling
-      if (!nextSibling || !nextSibling.hasAttribute('data-readacross-type')) {
-        const text = block.innerText?.trim()
-        if (text) {
-          const normalizedKey = normalizeText(text)
-          if (translationCache.has(normalizedKey)) {
-            // Re-inject silently
-            injectBlockTranslation(block, translationCache.get(normalizedKey)!)
-          }
+    const processedElements = document.querySelectorAll('[data-readacross-processed="true"]')
+    processedElements.forEach(block => {
+      if (!block.isConnected) return
+
+      const hasOverlay = block.querySelector(':scope > [data-readacross-type]')
+
+      if (!hasOverlay) {
+        // Translation was lost! Recycled Virtual DOM node.
+        const rawText = getOriginalInnerText(block as HTMLElement)
+        const cached = translationCache.get(rawText)
+        if (cached && cached !== "[NO_TRANSLATE]") {
+          injectBlockTranslation(block as HTMLElement, cached)
         }
       }
     })
@@ -431,6 +561,7 @@ async function enableContinuousTranslation() {
     return
   }
 
+
   isTranslationActive = true
 
   // Fetch user settings to know the target language for language detection
@@ -439,8 +570,9 @@ async function enableContinuousTranslation() {
     if (response && response.targetLang) {
       currentTargetLang = response.targetLang
     }
+
   } catch (e) {
-    console.warn("Could not fetch targetLang before translating.")
+    console.warn("Could not fetch targetLang before translating.", e)
   }
 
   // 1. Setup IntersectionObserver
@@ -450,6 +582,7 @@ async function enableContinuousTranslation() {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         const target = entry.target as HTMLElement
+
         intersectionObserver!.unobserve(target) // Only translate once
         translateBlock(target)
       }
@@ -472,6 +605,7 @@ async function enableContinuousTranslation() {
 
 function disableContinuousTranslation() {
   isTranslationActive = false
+  apiQueue.clear()
   if (intersectionObserver) intersectionObserver.disconnect()
   if (mutationObserver) mutationObserver.disconnect()
   if (recoveryInterval) {

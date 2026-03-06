@@ -76,6 +76,18 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
                 useFileStore.getState().setSelection(cleanText);
             }
         });
+
+        // Handle keyboard navigation inside epub iframe
+        rendition.on('keyup', (event: KeyboardEvent) => {
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+            if (event.key === 'ArrowLeft') {
+                rendition.prev();
+            } else if (event.key === 'ArrowRight') {
+                rendition.next();
+            }
+        });
     };
 
     // Set extraction function in store
@@ -176,6 +188,25 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
     const handleNext = useCallback(() => {
         renditionRef.current?.next();
     }, []);
+
+    // Handle keyboard navigation on main window
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if focus is in an input field
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+
+            if (e.key === 'ArrowLeft') {
+                handlePrev();
+            } else if (e.key === 'ArrowRight') {
+                handleNext();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handlePrev, handleNext]);
 
     if (!bookData) return <div className="p-10 text-center">Reading file...</div>;
 

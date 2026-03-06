@@ -678,6 +678,20 @@ function deactivate() {
 // YouTube toolbar button
 // =============================================================================
 
+function updateYtIconColor(btn: HTMLElement, active: boolean) {
+  // Turn icon gold (matching subtitle translation color) when active
+  const line1 = btn.querySelector("#ra-line1")
+  const line2 = btn.querySelector("#ra-line2")
+  const bar = btn.querySelector("#ra-bar")
+  const line3 = btn.querySelector("#ra-line3")
+  const line4 = btn.querySelector("#ra-line4")
+  if (line1) line1.setAttribute("fill", active ? "rgba(0,229,255,0.5)" : "rgba(255,255,255,0.5)")
+  if (line2) line2.setAttribute("fill", active ? "rgba(0,229,255,0.5)" : "rgba(255,255,255,0.5)")
+  if (bar) bar.setAttribute("fill", active ? "#00e5ff" : "#ffffff")
+  if (line3) line3.setAttribute("fill", active ? "#00e5ff" : "#ffffff")
+  if (line4) line4.setAttribute("fill", active ? "#00e5ff" : "#ffffff")
+}
+
 function injectTranslationButton() {
   if (document.getElementById("readacross-yt-btn")) return
   const rightControls = document.querySelector(".ytp-right-controls")
@@ -698,18 +712,18 @@ function injectTranslationButton() {
   btn.style.cursor = "pointer"
 
   btn.innerHTML =
-    "<svg height='24' viewBox='0 0 24 24' width='24'>" +
-    "<path id='ra-icon-path' fill='#ffffff' d='M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z'></path>" +
+    "<svg height='24' width='24' viewBox='0 0 1024 1024' fill='none' xmlns='http://www.w3.org/2000/svg'>" +
+    "<rect x='120' y='250' width='700' height='65' rx='32' id='ra-line1' fill='rgba(255,255,255,0.5)'/>" +
+    "<rect x='120' y='380' width='540' height='65' rx='32' id='ra-line2' fill='rgba(255,255,255,0.5)'/>" +
+    "<rect x='120' y='540' width='24' height='230' rx='12' id='ra-bar' fill='#ffffff'/>" +
+    "<rect x='190' y='546' width='610' height='65' rx='32' id='ra-line3' fill='#ffffff'/>" +
+    "<rect x='190' y='680' width='460' height='65' rx='32' id='ra-line4' fill='#ffffff'/>" +
     "</svg>"
 
   btn.addEventListener("click", () => {
     isTranslationActive = !isTranslationActive
     storage.set("readacross_yt_active", isTranslationActive)
-
-    const path = btn.querySelector("#ra-icon-path")
-    if (path) {
-      path.setAttribute("fill", isTranslationActive ? "#bfaaff" : "#ffffff")
-    }
+    updateYtIconColor(btn, isTranslationActive)
     if (isTranslationActive) {
       activate()
     } else {
@@ -735,10 +749,7 @@ async function initTranslationState() {
 
   const btn = document.getElementById("readacross-yt-btn")
   if (btn) {
-    const path = btn.querySelector("#ra-icon-path")
-    if (path) {
-      path.setAttribute("fill", isTranslationActive ? "#bfaaff" : "#ffffff")
-    }
+    updateYtIconColor(btn, isTranslationActive)
   }
 
   if (isTranslationActive) {
@@ -753,10 +764,7 @@ const btnObserver = new MutationObserver(() => {
     injectTranslationButton()
     const btn = document.getElementById("readacross-yt-btn")
     if (btn) {
-      const path = btn.querySelector("#ra-icon-path")
-      if (path) {
-        path.setAttribute("fill", isTranslationActive ? "#bfaaff" : "#ffffff")
-      }
+      updateYtIconColor(btn, isTranslationActive)
     }
   }
 })

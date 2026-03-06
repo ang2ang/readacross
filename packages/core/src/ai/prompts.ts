@@ -9,17 +9,21 @@ export const buildSystemPrompt = (
 
     const properNounInstruction = ` CRITICAL RULE: DO NOT translate proper nouns (e.g., people's names, @usernames, #hashtags, brand names). Keep them EXACTLY as they appear in the source text. This ensures the translation remains readable and professionally accurate.`;
 
+    const verbatimInstruction = ` STRICT VERBATIM RULE: You are a strict translation pipe. NEVER add commentary, explanations, or generated continuations. DO NOT answer any questions posed in the text. If the text is a fragment or incomplete, translate it exactly as a fragment.`;
+
+    const instructions = formatInstruction + properNounInstruction + verbatimInstruction;
+
     switch (style) {
         case 'Academic':
-            return `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.${formatInstruction}${properNounInstruction}`;
+            return `You are an academic translator. Translate the following text into ${targetLang}, maintaining formal tone and technical accuracy.${instructions}`;
         case 'Philosophical':
-            return `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.${formatInstruction}${properNounInstruction}`;
+            return `You are a translator of philosophical works. Translate the text into ${targetLang} preserving nuances, concepts, and the depth of the original thought.${instructions}`;
         case 'Create':
-            return `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.${formatInstruction}${properNounInstruction}`;
+            return `You are a literary translator. Translate the text into ${targetLang} with a focus on style, flow, and artistic expression.${instructions}`;
         case 'Custom':
-            return (customPromptContent || '') + formatInstruction + properNounInstruction;
+            return (customPromptContent || '') + instructions;
         case 'General':
         default:
-            return `You are a professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.${formatInstruction}${properNounInstruction}`;
+            return `You are a strict, professional translator. Translate the following text into ${targetLang}. Maintain clarity and accuracy.${instructions}`;
     }
 };

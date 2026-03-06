@@ -160,13 +160,13 @@ async function handleBatchTranslation(lines: string[], sender: chrome.runtime.Me
 
     const numberedText = lines.map((l, i) => `${i + 1}. ${l}`).join("\n")
 
-    const systemPrompt = `You are a subtitle translator. Translate the following numbered lines to ${targetLang}. 
+    const systemPrompt = `You are a strict, verbatim subtitle translator. Translate the following numbered lines to ${targetLang}. 
 CRITICAL RULES:
 1. Translate EACH line individually.
 2. NEVER merge two lines together. DO NOT skip lines.
 3. Output EXACTLY the same number of lines.
 4. MUST start each translated line with its exact original number (e.g., "1. ", "2. ").
-5. Output ONLY the translations, no explanations.`
+5. STRICT VERBATIM: NEVER add commentary, explanations, markdown formatting (unless in original), or generated continuations. DO NOT answer questions posed in the text.`
 
     let result = ""
     let parsedLinesCount = 0
@@ -232,10 +232,20 @@ CRITICAL RULES:
       }
     }
 
-    try { sendResponse({ translations: translated }) } catch (e) { console.debug("Context invalidated") }
+    // To prevent "Extension context invalidated" uncatchable console errors,
+    // we only send the response if the tab still exists
+    chrome.tabs.get(sender.tab!.id!, (tab) => {
+      if (chrome.runtime.lastError || !tab) return;
+      sendResponse({ translations: translated })
+    })
   } catch (error: any) {
     console.error("Batch translation error:", error)
-    try { sendResponse({ error: error.message }) } catch (e) { console.debug("Context invalidated") }
+    if (sender.tab?.id) {
+      chrome.tabs.get(sender.tab.id, (tab) => {
+        if (chrome.runtime.lastError || !tab) return;
+        sendResponse({ error: error.message })
+      })
+    }
   }
 }
 

@@ -45,6 +45,25 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ fontSize = 100 }) => {
         return () => useFileStore.getState().setGetPageText(null);
     }, [pdf, pageNumber]);
 
+    // Handle keyboard navigation
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if focus is in an input field
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+
+            if (e.key === 'ArrowLeft') {
+                setPageNumber(prev => Math.max(1, prev - 1));
+            } else if (e.key === 'ArrowRight' && numPages) {
+                setPageNumber(prev => Math.min(numPages, prev + 1));
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [numPages]);
+
     // Calculate page width based on fontSize percentage
     const pageWidth = Math.round(800 * (fontSize / 100));
 
