@@ -416,8 +416,8 @@ function getTranslatableBlocks(root: Node): HTMLElement[] {
         const parent = node.parentElement
         if (!parent) return NodeFilter.FILTER_REJECT
 
-        // Skip hidden/system elements and page chrome (nav, footer, header)
-        if (parent.closest('script, style, noscript, code, [data-readacross-type], footer, nav, header, [role="navigation"], [role="contentinfo"], [role="banner"]')) {
+        // Skip hidden/system elements, page chrome (nav, footer, header), and typical sidebars
+        if (parent.closest('script, style, noscript, code, [data-readacross-type], footer, nav, header, aside, [role="navigation"], [role="contentinfo"], [role="banner"], [role="complementary"], [data-testid="sidebarColumn"]')) {
           return NodeFilter.FILTER_REJECT
         }
 
@@ -513,11 +513,31 @@ function scanAndQueueTranslation(root: Node) {
 
   if (newBlocks.length === 0) return
 
-  // Filter out blocks that are children of another block in this same batch
-  // This ensures we prioritize the ancestor for better translation context
-  newBlocks = newBlocks.filter(el => {
-    return !newBlocks.some(other => el !== other && other.contains(el))
-  })
+  // Pre-calculate lengths to avoid layout thrashing
+  const lengths = new Map<HTMLElement, number>()
+  newBlocks.forEach(b => lengths.set(b, getBlockTextWithoutTranslation(b).length))
+
+  const toDrop = new Set<HTMLElement>()
+  for (let i = 0; i < newBlocks.length; i++) {
+    for (let j = 0; j < newBlocks.length; j++) {
+      if (i === j) continue
+      const parent = newBlocks[i]
+      const child = newBlocks[j]
+      
+      if (parent.contains(child)) {
+        // If the ancestor is massive, it's likely a layout container. 
+        // Drop it and keep the children so they get beautifully interleaved translations.
+        // Otherwise, drop the child to provide a unified translation block for the parent.
+        if ((lengths.get(parent) || 0) > 2500) {
+          toDrop.add(parent)
+        } else {
+          toDrop.add(child)
+        }
+      }
+    }
+  }
+
+  newBlocks = newBlocks.filter(b => !toDrop.has(b))
 
 
 
@@ -557,7 +577,7 @@ function startPeriodicRecovery() {
 }
 
 async function enableContinuousTranslation() {
-  if (window.location.hostname.includes("youtube.com")) {
+  if (window.location.hostname.includes("youtube.com") || window.location.hostname.includes("github.com")) {
     return
   }
 
@@ -667,7 +687,7 @@ injectTranslationStyles()
 
   // Auto-translate if this site is in the always-translate list
   ; (async () => {
-    if (window.location.hostname.includes("youtube.com")) return
+    if (window.location.hostname.includes("youtube.com") || window.location.hostname.includes("github.com")) return
     try {
       const storage = new Storage()
       const raw = await storage.get<string>("settings_always_translate_sites") ?? "[]"

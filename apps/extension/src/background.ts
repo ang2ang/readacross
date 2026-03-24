@@ -24,7 +24,7 @@ let translationProgress = { translated: 0, total: 0, active: false }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "TRANSLATE_TEXT") {
-    handleTranslationRequest(request.text, sendResponse)
+    handleTranslationRequest(request.text, sendResponse, request.promptStyle)
     return true
   }
 
@@ -249,7 +249,7 @@ CRITICAL RULES:
   }
 }
 
-async function handleTranslationRequest(text: string, sendResponse: (response: any) => void) {
+async function handleTranslationRequest(text: string, sendResponse: (response: any) => void, promptStyleOverride?: PromptStyle) {
   try {
     const { apiKey, baseUrl, model, temperature, style, targetLang } = await getSettings()
 
@@ -258,7 +258,8 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
       return
     }
 
-    const systemPrompt = buildSystemPrompt(style, targetLang)
+    const effectiveStyle = promptStyleOverride || style;
+    const systemPrompt = buildSystemPrompt(effectiveStyle, targetLang)
 
     let result = ""
     await translateText(text, {
