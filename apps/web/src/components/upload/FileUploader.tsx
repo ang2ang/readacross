@@ -12,7 +12,7 @@ export const FileUploader: React.FC = () => {
     const setFile = useFileStore((state) => state.setFile);
     const [isDragging, setIsDragging] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeMode, setActiveMode] = useState<InputMode>('file');
+    const [activeMode, setActiveMode] = useState<InputMode>('text');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const handleDrag = useCallback((e: React.DragEvent) => {

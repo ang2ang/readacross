@@ -10,8 +10,8 @@ interface InputModeSelectorProps {
 
 export const InputModeSelector: React.FC<InputModeSelectorProps> = ({ activeMode, onModeChange }) => {
     const tabs: { mode: InputMode; label: string; icon: React.ReactNode }[] = [
-        { mode: 'file', label: 'Upload File', icon: <Upload className="w-4 h-4" /> },
         { mode: 'text', label: 'Paste Text', icon: <FileText className="w-4 h-4" /> },
+        { mode: 'file', label: 'Upload File', icon: <Upload className="w-4 h-4" /> },
         { mode: 'image', label: 'Paste Image', icon: <Image className="w-4 h-4" /> },
     ];
 
