@@ -76,10 +76,11 @@ pnpm run build
 
 ## 📖 Usage
 
-1. **Configure API Key** - Click the settings icon in either the Web App or the Extension popup and enter your OpenAI/DeepSeek API key.
-2. **Web App (`apps/web`)** - Drag & drop a PDF/EPUB file or paste text/images to read and translate alongside the document.
-3. **Extension (`apps/extension`)** - Select text on any webpage to translate or trigger page-level translation using the shared core AI logic.
-4. **Customize** - Adjust translation style (Personas) and target language securely.
+1. **Zero-Config Hosted Model** - By default, the app seamlessly connects to our site-hosted serverless proxy. No API key or URL configuration is required!
+2. **Bring Your Own Key (BYOK)** - Prefer another provider? Click the settings icon in either the Web App or the Extension popup and enter your OpenAI or DeepSeek API key.
+3. **Web App (`apps/web`)** - Drag & drop a PDF/EPUB file or paste text/images to read and translate alongside the document.
+4. **Extension (`apps/extension`)** - Select text on any webpage to translate or trigger page-level translation using the shared core AI logic.
+5. **Customize** - Adjust translation style (Personas) and target language securely.
 
 ## 🏗 Architecture
 
@@ -87,7 +88,19 @@ ReadAcross has evolved into a Monorepo out of a need for cross-platform expansio
 
 - **`packages/core`**: The brain of the operation. Contains shared Types, the `OpenAI` client abstractions, Prompt building logic, and Persona management.
 - **`apps/web`**: The original heavy-duty Single Page Application for reading uploaded documents (PDFs, EPUBs, OCR).
+  - **`functions/`**: Cloudflare Pages Serverless Functions that act as a secure, auto-authenticating proxy to a private Ollama Tunnel.
 - **`apps/extension`**: The Plasmo-based browser extension leveraging `@readacross/core` to inject translation capabilities directly into the user's live browsing session.
+
+## ☁️ Deployment (Cloudflare Pages)
+
+The Web App is built to be deployed on **Cloudflare Pages**. The built-in proxy automatically secures your private local LLM instance via Cloudflare Access.
+
+To enable the Hosted proxy, configure the following Environment Variables in your Cloudflare Pages dashboard:
+
+- `OLLAMA_PRIVATE_BASE_URL` - Your Cloudflare Tunnel URL pointing to your local Ollama instance (e.g., `https://llm.yourdomain.com`).
+- `OLLAMA_MODEL` - Default model to use if none is provided (e.g., `qwen3.5:9b`).
+- `CF_ACCESS_CLIENT_ID` - Service Token ID to bypass Cloudflare Access (Encrypt as Secret).
+- `CF_ACCESS_CLIENT_SECRET` - Service Token Secret to bypass Cloudflare Access (Encrypt as Secret).
 
 ## 🛠 Tech Stack
 
