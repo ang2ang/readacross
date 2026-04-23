@@ -19,6 +19,7 @@ const buildDirs = fs.readdirSync(buildBase).filter(d => d.startsWith("chrome-mv3
 
 for (const dir of buildDirs) {
     const buildDir = path.join(buildBase, dir)
+    if (!fs.statSync(buildDir).isDirectory()) continue;
     const files = fs.readdirSync(buildDir)
 
     for (const size of sizes) {

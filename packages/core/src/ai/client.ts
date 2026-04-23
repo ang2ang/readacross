@@ -25,7 +25,7 @@ export const translateText = async (
             stream: true,
             temperature,
         },
-        provider === 'local' ? { signal, extra_body: { think: false } } : { signal }
+        provider === 'local' ? { signal, extraBody: { think: false } } : { signal }
     );
 
     for await (const chunk of response) {
