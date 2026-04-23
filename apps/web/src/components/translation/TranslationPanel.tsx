@@ -138,7 +138,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             return;
         }
 
-        if (!settings.apiKey && settings.provider !== 'local') {
+        if (!settings.apiKey && settings.provider !== 'local' && settings.provider !== 'hosted') {
             setError('Please configure API Key in settings first.');
             setIsLoading(false);
             return;

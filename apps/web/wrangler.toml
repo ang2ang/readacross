@@ -1,0 +1,19 @@
+# Wrangler config for Cloudflare Pages (local dev with `wrangler pages dev`)
+#
+# Usage:
+#   1. First build the Vite app:  pnpm run build
+#   2. Then run:  npx wrangler pages dev dist
+#
+# Required environment variables (set in CF Pages dashboard or .dev.vars):
+#   - OLLAMA_PRIVATE_BASE_URL  e.g. "https://llm-origin.example.com"
+#   - OLLAMA_MODEL             e.g. "qwen3.5:9b"
+#   - CF_ACCESS_CLIENT_ID      (secret)
+#   - CF_ACCESS_CLIENT_SECRET  (secret)
+
+name = "readacross"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Plaintext env vars (override in dashboard for production)
+# OLLAMA_PRIVATE_BASE_URL = "https://llm-origin.example.com"
+# OLLAMA_MODEL = "qwen3.5:9b"

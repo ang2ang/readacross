@@ -1,0 +1,8 @@
+# Local development secrets for Cloudflare Pages Functions
+# Copy this to .dev.vars and fill in real values.
+# NEVER commit .dev.vars to git!
+
+OLLAMA_PRIVATE_BASE_URL=https://llm-origin.example.com
+OLLAMA_MODEL=qwen3.5:9b
+CF_ACCESS_CLIENT_ID=your-client-id-here
+CF_ACCESS_CLIENT_SECRET=your-client-secret-here

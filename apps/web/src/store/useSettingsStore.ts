@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Provider, PromptStyle, CustomPrompt } from '@readacross/core';
 
+// ---------------------------------------------------------------------------
+// Default values for each provider
+// ---------------------------------------------------------------------------
+const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; model: string }> = {
+    hosted:   { baseUrl: '/api/openai',              model: 'qwen3.5:9b' },
+    deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+    openai:   { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    local:    { baseUrl: 'http://localhost:11434/v1',  model: 'qwen2.5:7b' },
+};
+
 interface SettingsState {
     provider: Provider;
     apiKey: string;
@@ -37,10 +47,11 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
     persist(
         (set, get) => ({
-            provider: 'deepseek',
+            // ── Default to hosted (server-proxied Ollama) ──
+            provider: 'hosted',
             apiKey: '',
-            baseUrl: 'https://api.deepseek.com',
-            model: 'deepseek-chat',
+            baseUrl: PROVIDER_DEFAULTS.hosted.baseUrl,
+            model: PROVIDER_DEFAULTS.hosted.model,
             promptStyle: 'General',
             customPrompts: [],
             selectedCustomPromptId: null,
@@ -63,11 +74,13 @@ export const useSettingsStore = create<SettingsState>()(
                 const newBaseUrls = { ...state.baseUrls, [state.provider]: state.baseUrl };
                 const newModels = { ...state.models, [state.provider]: state.model };
 
+                const defaults = PROVIDER_DEFAULTS[newProvider] ?? PROVIDER_DEFAULTS.hosted;
+
                 return {
                     provider: newProvider,
                     apiKey: newKeys[newProvider] ?? '',
-                    baseUrl: newBaseUrls[newProvider] ?? (newProvider === 'deepseek' ? 'https://api.deepseek.com' : newProvider === 'openai' ? 'https://api.openai.com/v1' : 'http://localhost:11434/v1'),
-                    model: newModels[newProvider] ?? (newProvider === 'deepseek' ? 'deepseek-chat' : newProvider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'),
+                    baseUrl: newBaseUrls[newProvider] ?? defaults.baseUrl,
+                    model: newModels[newProvider] ?? defaults.model,
                     keys: newKeys,
                     baseUrls: newBaseUrls,
                     models: newModels,

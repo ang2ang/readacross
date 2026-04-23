@@ -1,6 +1,9 @@
 import { useStorage } from "@plasmohq/storage/hook"
 import type { Provider, PromptStyle } from "@readacross/core"
 
+// Default hosted proxy URL — change this to your deployed site
+export const DEFAULT_HOSTED_BASE_URL = "https://readacross.pages.dev/api/openai"
+
 export const STORAGE_KEYS = {
   PROVIDER: "settings_provider",
   API_KEY_OPENAI: "settings_api_key_openai",
@@ -9,6 +12,7 @@ export const STORAGE_KEYS = {
   BASE_URL_DEEPSEEK: "settings_base_url_deepseek",
   API_KEY_LOCAL: "settings_api_key_local",
   BASE_URL_LOCAL: "settings_base_url_local",
+  BASE_URL_HOSTED: "settings_base_url_hosted",
   MODEL: "settings_model",
   PROMPT_STYLE: "settings_prompt_style",
   TARGET_LANG: "settings_target_lang",
@@ -18,13 +22,14 @@ export const STORAGE_KEYS = {
 }
 
 export function useExtensionSettings() {
-  const [provider, setProvider] = useStorage<Provider>(STORAGE_KEYS.PROVIDER, "deepseek")
+  const [provider, setProvider] = useStorage<Provider>(STORAGE_KEYS.PROVIDER, "hosted")
   const [openAiKey, setOpenAiKey] = useStorage<string>(STORAGE_KEYS.API_KEY_OPENAI, "")
   const [deepseekKey, setDeepseekKey] = useStorage<string>(STORAGE_KEYS.API_KEY_DEEPSEEK, "")
   const [localKey, setLocalKey] = useStorage<string>(STORAGE_KEYS.API_KEY_LOCAL, "")
   const [openAiBaseUrl, setOpenAiBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_OPENAI, "https://api.openai.com/v1")
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK, "https://api.deepseek.com")
   const [localBaseUrl, setLocalBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_LOCAL, "http://localhost:11434/v1")
+  const [hostedBaseUrl, setHostedBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_HOSTED, DEFAULT_HOSTED_BASE_URL)
   const [model, setModel] = useStorage<string>(STORAGE_KEYS.MODEL, "")
   const [promptStyle, setPromptStyle] = useStorage<PromptStyle>(STORAGE_KEYS.PROMPT_STYLE, "General")
   const [targetLang, setTargetLang] = useStorage<string>(STORAGE_KEYS.TARGET_LANG, "简体中文")
@@ -49,9 +54,9 @@ export function useExtensionSettings() {
     setAlwaysTranslateSitesRaw(JSON.stringify(next))
   }
 
-  const apiKey = provider === "deepseek" ? deepseekKey : provider === "openai" ? openAiKey : localKey
-  const baseUrl = provider === "deepseek" ? deepseekBaseUrl : provider === "openai" ? openAiBaseUrl : localBaseUrl
-  const defaultModel = provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
+  const apiKey = provider === "hosted" ? "" : provider === "deepseek" ? deepseekKey : provider === "openai" ? openAiKey : localKey
+  const baseUrl = provider === "hosted" ? hostedBaseUrl : provider === "deepseek" ? deepseekBaseUrl : provider === "openai" ? openAiBaseUrl : localBaseUrl
+  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
   const effectiveModel = model || defaultModel
 
   return {
@@ -61,6 +66,7 @@ export function useExtensionSettings() {
     localKey, setLocalKey,
     openAiBaseUrl, setOpenAiBaseUrl,
     deepseekBaseUrl, setDeepseekBaseUrl,
+    hostedBaseUrl, setHostedBaseUrl,
     localBaseUrl, setLocalBaseUrl,
     model, setModel,
     promptStyle, setPromptStyle,

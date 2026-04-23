@@ -29,3 +29,6 @@ video/
 # Plasmo / Extension
 .plasmo/
 apps/extension/build/
+
+# Cloudflare Pages local dev secrets
+.dev.vars

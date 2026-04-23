@@ -1,6 +1,6 @@
 import { translateText, buildSystemPrompt } from "@readacross/core"
 import { Storage } from "@plasmohq/storage"
-import { STORAGE_KEYS } from "./hooks/useExtensionSettings"
+import { STORAGE_KEYS, DEFAULT_HOSTED_BASE_URL } from "./hooks/useExtensionSettings"
 import type { Provider, PromptStyle } from "@readacross/core"
 
 const storage = new Storage()
@@ -131,23 +131,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 })
 
 async function getSettings() {
-  const provider = await storage.get<Provider>(STORAGE_KEYS.PROVIDER) || "deepseek"
-  const apiKey = provider === "deepseek"
-    ? await storage.get<string>(STORAGE_KEYS.API_KEY_DEEPSEEK)
-    : provider === "openai"
-      ? await storage.get<string>(STORAGE_KEYS.API_KEY_OPENAI)
-      : await storage.get<string>(STORAGE_KEYS.API_KEY_LOCAL)
-  const baseUrl = provider === "deepseek"
-    ? await storage.get<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK) || "https://api.deepseek.com"
-    : provider === "openai"
-      ? await storage.get<string>(STORAGE_KEYS.BASE_URL_OPENAI) || "https://api.openai.com/v1"
-      : await storage.get<string>(STORAGE_KEYS.BASE_URL_LOCAL) || "http://localhost:11434/v1"
+  const provider = await storage.get<Provider>(STORAGE_KEYS.PROVIDER) || "hosted"
+  const apiKey = provider === "hosted"
+    ? ""
+    : provider === "deepseek"
+      ? await storage.get<string>(STORAGE_KEYS.API_KEY_DEEPSEEK)
+      : provider === "openai"
+        ? await storage.get<string>(STORAGE_KEYS.API_KEY_OPENAI)
+        : await storage.get<string>(STORAGE_KEYS.API_KEY_LOCAL)
+  const baseUrl = provider === "hosted"
+    ? await storage.get<string>(STORAGE_KEYS.BASE_URL_HOSTED) || DEFAULT_HOSTED_BASE_URL
+    : provider === "deepseek"
+      ? await storage.get<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK) || "https://api.deepseek.com"
+      : provider === "openai"
+        ? await storage.get<string>(STORAGE_KEYS.BASE_URL_OPENAI) || "https://api.openai.com/v1"
+        : await storage.get<string>(STORAGE_KEYS.BASE_URL_LOCAL) || "http://localhost:11434/v1"
   const style = await storage.get<PromptStyle>(STORAGE_KEYS.PROMPT_STYLE) || "General"
   const targetLang = await storage.get<string>(STORAGE_KEYS.TARGET_LANG) || "简体中文"
   const customModel = await storage.get<string>(STORAGE_KEYS.MODEL) || ""
   const temperature = await storage.get<number>(STORAGE_KEYS.TEMPERATURE) ?? 0.3
 
-  const defaultModel = provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
+  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
   const model = customModel || defaultModel
 
   return { provider, apiKey, baseUrl, style, targetLang, model, temperature }
@@ -157,7 +161,7 @@ async function handleBatchTranslation(lines: string[], sender: chrome.runtime.Me
   try {
     const { provider, apiKey, baseUrl, model, temperature, targetLang } = await getSettings()
 
-    if (!apiKey && provider !== "local") {
+    if (!apiKey && provider !== "local" && provider !== "hosted") {
       sendResponse({ error: "API Key missing" })
       return
     }
@@ -258,7 +262,7 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
   try {
     const { provider, apiKey, baseUrl, model, temperature, style, targetLang } = await getSettings()
 
-    if (!apiKey && provider !== "local") {
+    if (!apiKey && provider !== "local" && provider !== "hosted") {
       sendResponse({ error: "API Key is missing. Please configure it in the extension popup." })
       return
     }

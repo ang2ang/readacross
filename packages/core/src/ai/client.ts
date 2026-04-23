@@ -15,6 +15,12 @@ export const translateText = async (
 
     let fullTranslation = '';
 
+    // For 'hosted' provider, think:false is injected server-side by the proxy.
+    // For 'local' provider (used by extension), we still send think:false client-side.
+    const requestOptions = provider === 'local'
+        ? { signal, extraBody: { think: false } }
+        : { signal };
+
     const response = await client.chat.completions.create(
         {
             model,
@@ -25,7 +31,7 @@ export const translateText = async (
             stream: true,
             temperature,
         },
-        provider === 'local' ? { signal, extraBody: { think: false } } : { signal }
+        requestOptions
     );
 
     for await (const chunk of response) {
@@ -41,3 +47,4 @@ export const translateText = async (
 
     return fullTranslation;
 };
+

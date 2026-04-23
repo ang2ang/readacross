@@ -140,6 +140,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         onClose();
     };
 
+    const handleProviderChange = (newProvider: Provider) => {
+        setDraft(d => {
+            const defaultBaseUrl = newProvider === 'hosted' ? '/api/openai' : newProvider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1';
+            const defaultModel = newProvider === 'hosted' ? 'qwen3.5:9b' : newProvider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o';
+            return {
+                ...d,
+                provider: newProvider,
+                apiKey: settings.keys[newProvider] ?? '',
+                baseUrl: settings.baseUrls[newProvider] ?? defaultBaseUrl,
+                model: settings.models[newProvider] ?? defaultModel,
+            };
+        });
+    };
+
     const handleAddPrompt = () => {
         const newPrompt: CustomPrompt = {
             id: `prompt_draft_${Date.now()}`,
@@ -250,53 +264,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         <label className="block text-sm font-medium text-slate-700">Provider</label>
                         <div className="grid grid-cols-3 gap-2">
                             <button
+                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'hosted' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => handleProviderChange('hosted')}
+                            >
+                                ✨ Hosted
+                            </button>
+                            <button
                                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'deepseek' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
-                                onClick={() => setDraft(d => ({ ...d, provider: 'deepseek' }))}
+                                onClick={() => handleProviderChange('deepseek')}
                             >
                                 DeepSeek
                             </button>
                             <button
                                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'openai' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
-                                onClick={() => setDraft(d => ({ ...d, provider: 'openai' }))}
+                                onClick={() => handleProviderChange('openai')}
                             >
                                 OpenAI
                             </button>
-                            <button
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
-                                onClick={() => setDraft(d => ({ ...d, provider: 'local' }))}
-                            >
-                                Local
-                            </button>
                         </div>
+                        {draft.provider === 'hosted' && (
+                            <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
+                                🟢 Using site-hosted model — no API key or URL needed.
+                            </p>
+                        )}
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                            <Key className="w-4 h-4 text-slate-400" />
-                            API Key
-                        </label>
-                        <input
-                            type="password"
-                            placeholder="sk-..."
-                            value={draft.apiKey}
-                            onChange={(e) => setDraft(d => ({ ...d, apiKey: e.target.value }))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        />
-                        <p className="text-xs text-slate-500">Stored locally in your browser.</p>
-                    </div>
+                    {/* API Key — hidden for hosted provider (managed server-side) */}
+                    {draft.provider !== 'hosted' && (
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <Key className="w-4 h-4 text-slate-400" />
+                                API Key
+                            </label>
+                            <input
+                                type="password"
+                                placeholder="sk-..."
+                                value={draft.apiKey}
+                                onChange={(e) => setDraft(d => ({ ...d, apiKey: e.target.value }))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            />
+                            <p className="text-xs text-slate-500">Stored locally in your browser.</p>
+                        </div>
+                    )}
 
-                    <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                            <Server className="w-4 h-4 text-slate-400" />
-                            Base URL
-                        </label>
-                        <input
-                            type="text"
-                            value={draft.baseUrl}
-                            onChange={(e) => setDraft(d => ({ ...d, baseUrl: e.target.value }))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        />
-                    </div>
+                    {/* Base URL — hidden for hosted provider (managed server-side) */}
+                    {draft.provider !== 'hosted' && (
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <Server className="w-4 h-4 text-slate-400" />
+                                Base URL
+                            </label>
+                            <input
+                                type="text"
+                                value={draft.baseUrl}
+                                onChange={(e) => setDraft(d => ({ ...d, baseUrl: e.target.value }))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            />
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -308,7 +333,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             value={draft.model}
                             onChange={(e) => setDraft(d => ({ ...d, model: e.target.value }))}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            placeholder={draft.provider === 'deepseek' ? 'deepseek-chat' : draft.provider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'}
+                            placeholder={draft.provider === 'hosted' ? 'qwen3.5:9b' : draft.provider === 'deepseek' ? 'deepseek-chat' : draft.provider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'}
                         />
                     </div>
 

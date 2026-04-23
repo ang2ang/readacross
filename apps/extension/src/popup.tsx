@@ -170,51 +170,67 @@ function IndexPopup() {
             <label><Server size={12} /> Provider</label>
             <select
               value={settings.provider}
-              onChange={(e) => settings.setProvider(e.target.value as any)}
+              onChange={(e) => {
+                settings.setProvider(e.target.value as any);
+                settings.setModel("");
+              }}
             >
+              <option value="hosted">✨ Hosted</option>
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
-              <option value="local">Local</option>
             </select>
           </div>
 
-          {/* API Key */}
-          <div className="form-group">
-            <label><Key size={12} /> API Key</label>
-            <input
-              type="password"
-              value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.localKey}
-              onChange={(e) => {
-                if (settings.provider === "deepseek") {
-                  settings.setDeepseekKey(e.target.value)
-                } else if (settings.provider === "openai") {
-                  settings.setOpenAiKey(e.target.value)
-                } else {
-                  settings.setLocalKey(e.target.value)
-                }
-              }}
-              placeholder={settings.provider === "local" ? "Skipped for local" : "sk-..."}
-            />
-          </div>
+          {/* Hosted info banner */}
+          {settings.provider === "hosted" && (
+            <div className="form-group">
+              <p style={{ fontSize: 11, color: "#059669", background: "#ecfdf5", padding: "6px 8px", borderRadius: 6, margin: 0, border: "1px solid #a7f3d0" }}>
+                🟢 Using site-hosted model — no API key needed.
+              </p>
+            </div>
+          )}
 
-          {/* Base URL */}
-          <div className="form-group">
-            <label><Server size={12} /> Base URL</label>
-            <input
-              type="text"
-              value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.localBaseUrl}
-              onChange={(e) => {
-                if (settings.provider === "deepseek") {
-                  settings.setDeepseekBaseUrl(e.target.value)
-                } else if (settings.provider === "openai") {
-                  settings.setOpenAiBaseUrl(e.target.value)
-                } else {
-                  settings.setLocalBaseUrl(e.target.value)
-                }
-              }}
-              placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
-            />
-          </div>
+          {/* API Key — hidden for hosted provider */}
+          {settings.provider !== "hosted" && (
+            <div className="form-group">
+              <label><Key size={12} /> API Key</label>
+              <input
+                type="password"
+                value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.localKey}
+                onChange={(e) => {
+                  if (settings.provider === "deepseek") {
+                    settings.setDeepseekKey(e.target.value)
+                  } else if (settings.provider === "openai") {
+                    settings.setOpenAiKey(e.target.value)
+                  } else {
+                    settings.setLocalKey(e.target.value)
+                  }
+                }}
+                placeholder={settings.provider === "local" ? "Skipped for local" : "sk-..."}
+              />
+            </div>
+          )}
+
+          {/* Base URL — hidden for hosted provider */}
+          {settings.provider !== "hosted" && (
+            <div className="form-group">
+              <label><Server size={12} /> Base URL</label>
+              <input
+                type="text"
+                value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.localBaseUrl}
+                onChange={(e) => {
+                  if (settings.provider === "deepseek") {
+                    settings.setDeepseekBaseUrl(e.target.value)
+                  } else if (settings.provider === "openai") {
+                    settings.setOpenAiBaseUrl(e.target.value)
+                  } else {
+                    settings.setLocalBaseUrl(e.target.value)
+                  }
+                }}
+                placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
+              />
+            </div>
+          )}
 
           {/* Model */}
           <div className="form-group">
@@ -284,7 +300,7 @@ function IndexPopup() {
 
       {/* Footer */}
       <footer className="popup-footer">
-        <p>Powered by {settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : "Local"} · {settings.effectiveModel}</p>
+        <p>Powered by {settings.provider === "hosted" ? "Hosted" : settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : "Local"} · {settings.effectiveModel}</p>
       </footer>
     </div>
   )
