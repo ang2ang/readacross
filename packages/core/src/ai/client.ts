@@ -7,10 +7,6 @@ export const translateText = async (
 ): Promise<string> => {
     const { apiKey, baseUrl, model, temperature, systemPrompt, signal, onStream } = options;
 
-    if (!apiKey && !baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
-        throw new Error('API Key is required.');
-    }
-
     const client = new OpenAI({
         apiKey: apiKey || 'dummy-key',
         baseURL: baseUrl,
