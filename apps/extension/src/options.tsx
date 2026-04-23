@@ -99,22 +99,30 @@ function OptionsPage() {
             >
               OpenAI
             </button>
+            <button
+              className={`opt-provider-btn ${settings.provider === "local" ? "active" : ""}`}
+              onClick={() => settings.setProvider("local")}
+            >
+              Local
+            </button>
           </div>
         </div>
 
         <div className="opt-form-group">
-          <label>{settings.provider === "deepseek" ? "DeepSeek" : "OpenAI"} API Key</label>
+          <label>{settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : "Local"} API Key</label>
           <input
             type="password"
-            value={settings.provider === "deepseek" ? settings.deepseekKey : settings.openAiKey}
+            value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.localKey}
             onChange={(e) => {
               if (settings.provider === "deepseek") {
                 settings.setDeepseekKey(e.target.value)
-              } else {
+              } else if (settings.provider === "openai") {
                 settings.setOpenAiKey(e.target.value)
+              } else {
+                settings.setLocalKey(e.target.value)
               }
             }}
-            placeholder="sk-..."
+            placeholder={settings.provider === "local" ? "Usually not required for local models" : "sk-..."}
           />
           <p className="hint">Stored locally in your browser. Never sent to third parties.</p>
         </div>
@@ -123,15 +131,17 @@ function OptionsPage() {
           <label>Base URL</label>
           <input
             type="text"
-            value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.openAiBaseUrl}
+            value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.localBaseUrl}
             onChange={(e) => {
               if (settings.provider === "deepseek") {
                 settings.setDeepseekBaseUrl(e.target.value)
-              } else {
+              } else if (settings.provider === "openai") {
                 settings.setOpenAiBaseUrl(e.target.value)
+              } else {
+                settings.setLocalBaseUrl(e.target.value)
               }
             }}
-            placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : "https://api.openai.com/v1"}
+            placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
           />
         </div>
 

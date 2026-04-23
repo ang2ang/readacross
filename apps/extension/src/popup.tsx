@@ -174,6 +174,7 @@ function IndexPopup() {
             >
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
+              <option value="local">Local</option>
             </select>
           </div>
 
@@ -182,15 +183,17 @@ function IndexPopup() {
             <label><Key size={12} /> API Key</label>
             <input
               type="password"
-              value={settings.provider === "deepseek" ? settings.deepseekKey : settings.openAiKey}
+              value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.localKey}
               onChange={(e) => {
                 if (settings.provider === "deepseek") {
                   settings.setDeepseekKey(e.target.value)
-                } else {
+                } else if (settings.provider === "openai") {
                   settings.setOpenAiKey(e.target.value)
+                } else {
+                  settings.setLocalKey(e.target.value)
                 }
               }}
-              placeholder="sk-..."
+              placeholder={settings.provider === "local" ? "Skipped for local" : "sk-..."}
             />
           </div>
 
@@ -199,15 +202,17 @@ function IndexPopup() {
             <label><Server size={12} /> Base URL</label>
             <input
               type="text"
-              value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.openAiBaseUrl}
+              value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.localBaseUrl}
               onChange={(e) => {
                 if (settings.provider === "deepseek") {
                   settings.setDeepseekBaseUrl(e.target.value)
-                } else {
+                } else if (settings.provider === "openai") {
                   settings.setOpenAiBaseUrl(e.target.value)
+                } else {
+                  settings.setLocalBaseUrl(e.target.value)
                 }
               }}
-              placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : "https://api.openai.com/v1"}
+              placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
             />
           </div>
 
@@ -279,7 +284,7 @@ function IndexPopup() {
 
       {/* Footer */}
       <footer className="popup-footer">
-        <p>Powered by {settings.provider === "deepseek" ? "DeepSeek" : "OpenAI"} · {settings.effectiveModel}</p>
+        <p>Powered by {settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : "Local"} · {settings.effectiveModel}</p>
       </footer>
     </div>
   )

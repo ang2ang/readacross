@@ -46,8 +46,8 @@ export const useSettingsStore = create<SettingsState>()(
             setBaseUrl: (baseUrl) => set({ baseUrl }),
             setProvider: (provider) => set({
                 provider,
-                baseUrl: provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1',
-                model: provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o'
+                baseUrl: provider === 'deepseek' ? 'https://api.deepseek.com' : provider === 'openai' ? 'https://api.openai.com/v1' : 'http://localhost:11434/v1',
+                model: provider === 'deepseek' ? 'deepseek-chat' : provider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'
             }),
             setModel: (model) => set({ model }),
             setPromptStyle: (promptStyle) => set({ promptStyle }),

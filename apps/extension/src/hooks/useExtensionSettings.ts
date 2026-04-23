@@ -7,6 +7,8 @@ export const STORAGE_KEYS = {
   API_KEY_DEEPSEEK: "settings_api_key_deepseek",
   BASE_URL_OPENAI: "settings_base_url_openai",
   BASE_URL_DEEPSEEK: "settings_base_url_deepseek",
+  API_KEY_LOCAL: "settings_api_key_local",
+  BASE_URL_LOCAL: "settings_base_url_local",
   MODEL: "settings_model",
   PROMPT_STYLE: "settings_prompt_style",
   TARGET_LANG: "settings_target_lang",
@@ -19,8 +21,10 @@ export function useExtensionSettings() {
   const [provider, setProvider] = useStorage<Provider>(STORAGE_KEYS.PROVIDER, "deepseek")
   const [openAiKey, setOpenAiKey] = useStorage<string>(STORAGE_KEYS.API_KEY_OPENAI, "")
   const [deepseekKey, setDeepseekKey] = useStorage<string>(STORAGE_KEYS.API_KEY_DEEPSEEK, "")
+  const [localKey, setLocalKey] = useStorage<string>(STORAGE_KEYS.API_KEY_LOCAL, "")
   const [openAiBaseUrl, setOpenAiBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_OPENAI, "https://api.openai.com/v1")
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK, "https://api.deepseek.com")
+  const [localBaseUrl, setLocalBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_LOCAL, "http://localhost:11434/v1")
   const [model, setModel] = useStorage<string>(STORAGE_KEYS.MODEL, "")
   const [promptStyle, setPromptStyle] = useStorage<PromptStyle>(STORAGE_KEYS.PROMPT_STYLE, "General")
   const [targetLang, setTargetLang] = useStorage<string>(STORAGE_KEYS.TARGET_LANG, "简体中文")
@@ -45,17 +49,19 @@ export function useExtensionSettings() {
     setAlwaysTranslateSitesRaw(JSON.stringify(next))
   }
 
-  const apiKey = provider === "deepseek" ? deepseekKey : openAiKey
-  const baseUrl = provider === "deepseek" ? deepseekBaseUrl : openAiBaseUrl
-  const defaultModel = provider === "deepseek" ? "deepseek-chat" : "gpt-4o-mini"
+  const apiKey = provider === "deepseek" ? deepseekKey : provider === "openai" ? openAiKey : localKey
+  const baseUrl = provider === "deepseek" ? deepseekBaseUrl : provider === "openai" ? openAiBaseUrl : localBaseUrl
+  const defaultModel = provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
   const effectiveModel = model || defaultModel
 
   return {
     provider, setProvider,
     openAiKey, setOpenAiKey,
     deepseekKey, setDeepseekKey,
+    localKey, setLocalKey,
     openAiBaseUrl, setOpenAiBaseUrl,
     deepseekBaseUrl, setDeepseekBaseUrl,
+    localBaseUrl, setLocalBaseUrl,
     model, setModel,
     promptStyle, setPromptStyle,
     targetLang, setTargetLang,

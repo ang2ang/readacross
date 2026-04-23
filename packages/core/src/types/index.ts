@@ -1,4 +1,4 @@
-export type Provider = 'deepseek' | 'openai';
+export type Provider = 'deepseek' | 'openai' | 'local';
 export type PromptStyle = 'General' | 'Academic' | 'Create' | 'Philosophical' | 'Custom';
 
 export interface CustomPrompt {

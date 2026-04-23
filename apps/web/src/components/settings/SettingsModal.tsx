@@ -244,7 +244,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     <div className="space-y-4">
                         <label className="block text-sm font-medium text-slate-700">Provider</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                             <button
                                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'deepseek' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => setDraft(d => ({ ...d, provider: 'deepseek' }))}
@@ -256,6 +256,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 onClick={() => setDraft(d => ({ ...d, provider: 'openai' }))}
                             >
                                 OpenAI
+                            </button>
+                            <button
+                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => setDraft(d => ({ ...d, provider: 'local' }))}
+                            >
+                                Local
                             </button>
                         </div>
                     </div>
