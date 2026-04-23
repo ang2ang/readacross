@@ -67,19 +67,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // ---- Determine upstream path from the catch-all [[path]] param ----
   // params.path is an array for catch-all routes, e.g. ["models"] or ["chat", "completions"]
   const subPath = Array.isArray(params.path) ? params.path.join("/") : (params.path as string || "");
-  const upstreamBase = env.OLLAMA_PRIVATE_BASE_URL.replace(/\/+$/, "");
+  const upstreamBase = env.OLLAMA_PRIVATE_BASE_URL.trim().replace(/\/+$/, "");
   const upstreamUrl = `${upstreamBase}/v1/${subPath}`;
 
   // ---- Build upstream headers ----
   const upstreamHeaders = new Headers();
   upstreamHeaders.set("Content-Type", "application/json");
+  // Some strict upstream rules (like CF Bot Fight Mode) drop requests without User-Agent
+  upstreamHeaders.set("User-Agent", "ReadAcross-Pages-Proxy/1.0");
 
   // Attach Cloudflare Access service-token credentials
   if (env.CF_ACCESS_CLIENT_ID) {
-    upstreamHeaders.set("CF-Access-Client-Id", env.CF_ACCESS_CLIENT_ID);
+    upstreamHeaders.set("CF-Access-Client-Id", env.CF_ACCESS_CLIENT_ID.trim());
   }
   if (env.CF_ACCESS_CLIENT_SECRET) {
-    upstreamHeaders.set("CF-Access-Client-Secret", env.CF_ACCESS_CLIENT_SECRET);
+    upstreamHeaders.set("CF-Access-Client-Secret", env.CF_ACCESS_CLIENT_SECRET.trim());
   }
 
   // Propagate Authorization header if the client sends one (for BYOK providers)
@@ -131,7 +133,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     // Default model to env.OLLAMA_MODEL if not specified
     if (!body.model && env.OLLAMA_MODEL) {
-      body.model = env.OLLAMA_MODEL;
+      body.model = env.OLLAMA_MODEL.trim();
     }
 
     // -------------------------------------------------------------------
