@@ -13,16 +13,6 @@ export const translateText = async (
         dangerouslyAllowBrowser: true, // Needed for frontend usage (web or extension popup)
     });
 
-    const requestOptions: any = {
-        signal,
-    };
-
-    // If local provider and explicitly wanted, we inject think: false
-    // Most local proxies or custom OpenAI wrappers mapping Qwen2.5/DeepSeek-R1 support this
-    if (provider === 'local') {
-        requestOptions.extra_body = { think: false };
-    }
-
     let fullTranslation = '';
 
     const response = await client.chat.completions.create(
@@ -35,7 +25,7 @@ export const translateText = async (
             stream: true,
             temperature,
         },
-        requestOptions
+        provider === 'local' ? { signal, extra_body: { think: false } } : { signal }
     );
 
     for await (const chunk of response) {
