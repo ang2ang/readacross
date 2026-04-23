@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { type PromptStyle, type Provider, type CustomPrompt } from '@readacross/core';
-import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer, Plus, Trash2, Edit2, Check } from 'lucide-react';
+import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer, Plus, Trash2, Edit2, Check, BookOpen } from 'lucide-react';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -12,6 +12,7 @@ interface LocalSettings {
     provider: Provider;
     apiKey: string;
     baseUrl: string;
+    model: string;
     temperature: number;
     targetLanguage: string;
     promptStyle: PromptStyle;
@@ -63,6 +64,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         provider: settings.provider,
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl,
+        model: settings.model,
         temperature: settings.temperature,
         targetLanguage: settings.targetLanguage,
         promptStyle: settings.promptStyle,
@@ -82,6 +84,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 provider: settings.provider,
                 apiKey: settings.apiKey,
                 baseUrl: settings.baseUrl,
+                model: settings.model,
                 temperature: settings.temperature,
                 targetLanguage: settings.targetLanguage,
                 promptStyle: settings.promptStyle,
@@ -90,13 +93,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             });
             setEditingPromptId(null);
         }
-    }, [isOpen, settings.provider, settings.apiKey, settings.baseUrl, settings.temperature, settings.targetLanguage, settings.promptStyle, settings.customPrompts, settings.selectedCustomPromptId]);
+    }, [isOpen, settings.provider, settings.apiKey, settings.baseUrl, settings.model, settings.temperature, settings.targetLanguage, settings.promptStyle, settings.customPrompts, settings.selectedCustomPromptId]);
 
     const handleSave = () => {
         // Apply all changes to the store
         settings.setProvider(draft.provider);
         settings.setApiKey(draft.apiKey);
         settings.setBaseUrl(draft.baseUrl);
+        settings.setModel(draft.model);
         settings.setTemperature(draft.temperature);
         settings.setTargetLanguage(draft.targetLanguage);
         settings.setPromptStyle(draft.promptStyle);
@@ -291,6 +295,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             value={draft.baseUrl}
                             onChange={(e) => setDraft(d => ({ ...d, baseUrl: e.target.value }))}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                            <BookOpen className="w-4 h-4 text-slate-400" />
+                            Model
+                        </label>
+                        <input
+                            type="text"
+                            value={draft.model}
+                            onChange={(e) => setDraft(d => ({ ...d, model: e.target.value }))}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            placeholder={draft.provider === 'deepseek' ? 'deepseek-chat' : draft.provider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'}
                         />
                     </div>
 
