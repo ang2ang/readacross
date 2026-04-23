@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { TranslationOptions } from '../types';
+import type { TranslationOptions } from '../types/index.js';
 
 export const translateText = async (
     text: string,
