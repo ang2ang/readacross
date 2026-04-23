@@ -84,26 +84,41 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     upstreamHeaders.set("CF-Access-Client-Secret", env.CF_ACCESS_CLIENT_SECRET.trim());
   }
 
-  // Propagate Authorization header if the client sends one (for BYOK providers)
+  // Propagate Authorization header ONLY if it looks like a real key (BYOK mode)
+  // We skip 'dummy-key' or very short keys to avoid interfering with CF Access.
   const clientAuth = request.headers.get("Authorization");
-  if (clientAuth) {
+  if (clientAuth && !clientAuth.includes("dummy-key") && clientAuth.length > 20) {
     upstreamHeaders.set("Authorization", clientAuth);
   }
 
   // ---- Handle GET requests (e.g. /models) ----
   if (request.method === "GET") {
-    const upstreamResp = await fetch(upstreamUrl, {
-      method: "GET",
-      headers: upstreamHeaders,
-    });
+    try {
+      const upstreamResp = await fetch(upstreamUrl, {
+        method: "GET",
+        headers: upstreamHeaders,
+      });
 
-    return new Response(upstreamResp.body, {
-      status: upstreamResp.status,
-      headers: {
-        "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+      if (upstreamResp.status === 403) {
+        return new Response(
+          JSON.stringify({
+            error: "Upstream 403: Cloudflare Access or WAF blocked the proxy request. Check Service Token Policies and Bot Fight Mode.",
+            debug_url: upstreamUrl
+          }),
+          { status: 403, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+        );
+      }
+
+      return new Response(upstreamResp.body, {
+        status: upstreamResp.status,
+        headers: {
+          "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: "Fetch failed", details: String(e) }), { status: 502 });
+    }
   }
 
   // ---- Handle OPTIONS (CORS preflight) ----
