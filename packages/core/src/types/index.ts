@@ -8,6 +8,7 @@ export interface CustomPrompt {
 }
 
 export interface TranslationOptions {
+    provider?: Provider;
     apiKey: string;
     baseUrl: string;
     model: string;

@@ -176,6 +176,7 @@ CRITICAL RULES:
     let parsedLinesCount = 0
 
     await translateText(numberedText, {
+      provider,
       apiKey,
       baseUrl,
       model,
@@ -267,6 +268,7 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
 
     let result = ""
     await translateText(text, {
+      provider,
       apiKey,
       baseUrl,
       model,

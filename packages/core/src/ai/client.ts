@@ -5,13 +5,23 @@ export const translateText = async (
     text: string,
     options: TranslationOptions
 ): Promise<string> => {
-    const { apiKey, baseUrl, model, temperature, systemPrompt, signal, onStream } = options;
+    const { provider, apiKey, baseUrl, model, temperature, systemPrompt, signal, onStream } = options;
 
     const client = new OpenAI({
         apiKey: apiKey || 'dummy-key',
         baseURL: baseUrl,
         dangerouslyAllowBrowser: true, // Needed for frontend usage (web or extension popup)
     });
+
+    const requestOptions: any = {
+        signal,
+    };
+
+    // If local provider and explicitly wanted, we inject think: false
+    // Most local proxies or custom OpenAI wrappers mapping Qwen2.5/DeepSeek-R1 support this
+    if (provider === 'local') {
+        requestOptions.extra_body = { think: false };
+    }
 
     let fullTranslation = '';
 
@@ -25,7 +35,7 @@ export const translateText = async (
             stream: true,
             temperature,
         },
-        { signal }
+        requestOptions
     );
 
     for await (const chunk of response) {

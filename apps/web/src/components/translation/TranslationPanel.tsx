@@ -163,6 +163,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             let fullTranslation = '';
             
             await translateText(textToTranslate, {
+                provider: settings.provider,
                 apiKey: settings.apiKey,
                 baseUrl: settings.baseUrl,
                 model: settings.model,
