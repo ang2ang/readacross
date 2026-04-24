@@ -19,6 +19,40 @@ function normalizeLocalOllamaBaseUrl(baseUrl: string): string {
     return `${trimmed}/v1`;
 }
 
+function isCrossOriginBrowserRequest(resolvedBaseUrl: string): boolean {
+    if (typeof window === 'undefined' || !window.location?.origin) {
+        return false;
+    }
+
+    try {
+        return new URL(resolvedBaseUrl).origin !== window.location.origin;
+    } catch {
+        return false;
+    }
+}
+
+function normalizeProviderError(
+    error: unknown,
+    provider: TranslationOptions['provider'],
+    resolvedBaseUrl: string
+): Error {
+    if (!(error instanceof Error)) {
+        return new Error(String(error));
+    }
+
+    if (provider === 'local' && isCrossOriginBrowserRequest(resolvedBaseUrl)) {
+        const message = error.message || '';
+        if (message.includes('405')) {
+            return new Error(
+                `Remote Ollama returned 405. This is usually the browser's CORS preflight (OPTIONS) being rejected by the remote host or reverse proxy. ` +
+                `Use the hosted proxy, or enable CORS/OPTIONS on ${new URL(resolvedBaseUrl).origin}.`
+            );
+        }
+    }
+
+    return error;
+}
+
 /**
  * Resolve a potentially relative baseUrl to an absolute URL.
  * The OpenAI SDK internally calls `new URL(path, baseURL)` which requires
@@ -73,28 +107,32 @@ export const translateText = async (
         ? { signal, extraBody: { think: false } }
         : { signal };
 
-    const response = await client.chat.completions.create(
-        {
-            model,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: text }
-            ],
-            stream: true,
-            temperature,
-        },
-        requestOptions
-    );
+    try {
+        const response = await client.chat.completions.create(
+            {
+                model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: text }
+                ],
+                stream: true,
+                temperature,
+            },
+            requestOptions
+        );
 
-    for await (const chunk of response) {
-        if (signal?.aborted) {
-            throw new DOMException('Aborted', 'AbortError');
+        for await (const chunk of response) {
+            if (signal?.aborted) {
+                throw new DOMException('Aborted', 'AbortError');
+            }
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content && onStream) {
+                onStream(content);
+            }
+            fullTranslation += content;
         }
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content && onStream) {
-            onStream(content);
-        }
-        fullTranslation += content;
+    } catch (error) {
+        throw normalizeProviderError(error, provider, resolvedBaseUrl);
     }
 
     return fullTranslation;
