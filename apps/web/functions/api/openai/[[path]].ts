@@ -156,7 +156,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // See comment at top — disables slow reasoning mode for lightweight
     // translation / lookup tasks.  Change FORCE_THINK_DISABLED to toggle.
     // -------------------------------------------------------------------
-    if (FORCE_THINK_DISABLED && body.think === undefined) {
+    if (FORCE_THINK_DISABLED) {
       body.think = false;
     }
 

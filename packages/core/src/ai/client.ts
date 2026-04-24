@@ -162,39 +162,58 @@ export const translateText = async (
         requestController.abort('Request timed out');
     }, REQUEST_TIMEOUT_MS);
 
-    // For 'hosted' provider, think:false is injected server-side by the proxy.
-    // For 'local' provider (used by extension), we still send think:false client-side.
-    const requestOptions = provider === 'local'
-        ? { signal: requestController.signal, extraBody: { think: false } }
-        : { signal: requestController.signal };
+    const isOllamaProvider = provider === 'local' || provider === 'hosted';
+    const shouldUseStreaming = !isOllamaProvider;
+    const requestOptions = { signal: requestController.signal };
+    const requestBody = {
+        model,
+        messages: [
+            { role: 'system' as const, content: systemPrompt },
+            { role: 'user' as const, content: text }
+        ],
+        stream: shouldUseStreaming,
+        temperature,
+        ...(isOllamaProvider ? { think: false } : {})
+    };
 
     try {
-        const response = await client.chat.completions.create(
-            {
-                model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: text }
-                ],
-                stream: true,
-                temperature,
-            },
-            requestOptions
-        );
-
-        resetStreamIdleTimeout();
-
-        for await (const chunk of response) {
-            if (requestController.signal.aborted) {
-                throw new DOMException('Aborted', 'AbortError');
-            }
-
+        if (shouldUseStreaming) {
+            const response = await client.chat.completions.create(
+                { ...requestBody, stream: true },
+                requestOptions
+            );
             resetStreamIdleTimeout();
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content && onStream) {
-                onStream(content);
+
+            for await (const chunk of response) {
+                if (requestController.signal.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
+                }
+
+                resetStreamIdleTimeout();
+                const content = chunk.choices[0]?.delta?.content || '';
+                if (content && onStream) {
+                    onStream(content);
+                }
+                fullTranslation += content;
             }
-            fullTranslation += content;
+        } else {
+            const response = await client.chat.completions.create(
+                { ...requestBody, stream: false },
+                requestOptions
+            );
+            const content = response.choices[0]?.message?.content;
+            fullTranslation = typeof content === 'string'
+                ? content
+                : Array.isArray(content)
+                    ? (content as Array<{ type?: string; text?: string }>)
+                        .filter(item => item.type === 'text' && typeof item.text === 'string')
+                        .map(item => item.text as string)
+                        .join('')
+                    : '';
+
+            if (fullTranslation && onStream) {
+                onStream(fullTranslation);
+            }
         }
     } catch (error) {
         throw normalizeProviderError(error, provider, resolvedBaseUrl);
