@@ -1,6 +1,9 @@
 import OpenAI from 'openai';
 import type { TranslationOptions } from '../types/index.js';
 
+const REQUEST_TIMEOUT_MS = 45000;
+const STREAM_IDLE_TIMEOUT_MS = 15000;
+
 function normalizeLocalOllamaBaseUrl(baseUrl: string): string {
     const trimmed = baseUrl.trim().replace(/\/+$/, '');
 
@@ -50,7 +53,49 @@ function normalizeProviderError(
         }
     }
 
+    if (error.name === 'AbortError') {
+        const message = error.message || '';
+        if (message.includes('timed out') || message.includes('timeout')) {
+            return new Error(
+                `The translation request timed out while waiting for the Ollama response stream from ${new URL(resolvedBaseUrl).origin}.`
+            );
+        }
+    }
+
     return error;
+}
+
+function createRequestController(signal?: AbortSignal): {
+    signal: AbortSignal;
+    abort: (reason?: string) => void;
+    cleanup: () => void;
+} {
+    const controller = new AbortController();
+
+    const onAbort = () => {
+        const reason = typeof signal?.reason === 'string' ? signal.reason : 'Aborted';
+        controller.abort(new DOMException(reason, 'AbortError'));
+    };
+
+    if (signal) {
+        if (signal.aborted) {
+            onAbort();
+        } else {
+            signal.addEventListener('abort', onAbort, { once: true });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        abort: (reason = 'Request timed out') => {
+            if (!controller.signal.aborted) {
+                controller.abort(new DOMException(reason, 'AbortError'));
+            }
+        },
+        cleanup: () => {
+            signal?.removeEventListener('abort', onAbort);
+        }
+    };
 }
 
 /**
@@ -92,6 +137,7 @@ export const translateText = async (
     const { provider, apiKey, baseUrl, model, temperature, systemPrompt, signal, onStream } = options;
 
     const resolvedBaseUrl = resolveBaseUrl(baseUrl, provider);
+    const requestController = createRequestController(signal);
 
     const client = new OpenAI({
         apiKey: apiKey || 'dummy-key',
@@ -100,12 +146,27 @@ export const translateText = async (
     });
 
     let fullTranslation = '';
+    let requestTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let streamIdleTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const resetStreamIdleTimeout = () => {
+        if (streamIdleTimeoutId) {
+            clearTimeout(streamIdleTimeoutId);
+        }
+        streamIdleTimeoutId = setTimeout(() => {
+            requestController.abort('Response stream timed out');
+        }, STREAM_IDLE_TIMEOUT_MS);
+    };
+
+    requestTimeoutId = setTimeout(() => {
+        requestController.abort('Request timed out');
+    }, REQUEST_TIMEOUT_MS);
 
     // For 'hosted' provider, think:false is injected server-side by the proxy.
     // For 'local' provider (used by extension), we still send think:false client-side.
     const requestOptions = provider === 'local'
-        ? { signal, extraBody: { think: false } }
-        : { signal };
+        ? { signal: requestController.signal, extraBody: { think: false } }
+        : { signal: requestController.signal };
 
     try {
         const response = await client.chat.completions.create(
@@ -121,10 +182,14 @@ export const translateText = async (
             requestOptions
         );
 
+        resetStreamIdleTimeout();
+
         for await (const chunk of response) {
-            if (signal?.aborted) {
+            if (requestController.signal.aborted) {
                 throw new DOMException('Aborted', 'AbortError');
             }
+
+            resetStreamIdleTimeout();
             const content = chunk.choices[0]?.delta?.content || '';
             if (content && onStream) {
                 onStream(content);
@@ -133,6 +198,14 @@ export const translateText = async (
         }
     } catch (error) {
         throw normalizeProviderError(error, provider, resolvedBaseUrl);
+    } finally {
+        if (requestTimeoutId) {
+            clearTimeout(requestTimeoutId);
+        }
+        if (streamIdleTimeoutId) {
+            clearTimeout(streamIdleTimeoutId);
+        }
+        requestController.cleanup();
     }
 
     return fullTranslation;
