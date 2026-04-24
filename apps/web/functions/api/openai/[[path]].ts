@@ -52,6 +52,7 @@ const FORCE_THINK_DISABLED = true;
 
 // Default max_tokens when the client does not specify one.
 const DEFAULT_MAX_TOKENS = 4096;
+const UPSTREAM_TIMEOUT_MS = 30000;
 
 function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -67,6 +68,18 @@ function jsonResponse(body: Record<string, unknown>, status: number, headers: Re
 async function readResponsePreview(response: Response): Promise<string> {
   const text = await response.text();
   return text.trim().slice(0, 1000);
+}
+
+function createTimeoutSignal(timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(`Upstream timed out after ${timeoutMs}ms`);
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
 }
 
 export const onRequest: PagesFunction<Env> = async (context) => {
@@ -85,6 +98,27 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const subPath = Array.isArray(params.path) ? params.path.join("/") : (params.path as string || "");
   const upstreamBase = env.OLLAMA_PRIVATE_BASE_URL.trim().replace(/\/+$/, "");
   const upstreamUrl = `${upstreamBase}/v1/${subPath}`;
+  let upstreamBaseUrl: URL;
+  try {
+    upstreamBaseUrl = new URL(upstreamBase);
+  } catch {
+    return jsonResponse(
+      { error: "Server misconfiguration: OLLAMA_PRIVATE_BASE_URL is not a valid absolute URL" },
+      500
+    );
+  }
+
+  const requestUrl = new URL(request.url);
+  if (upstreamBaseUrl.host === requestUrl.host || upstreamBaseUrl.pathname.includes("/api/openai")) {
+    return jsonResponse(
+      {
+        error: "Server misconfiguration: OLLAMA_PRIVATE_BASE_URL points back to the Pages proxy. Use the Cloudflare Tunnel hostname for Ollama instead.",
+        upstream_host: upstreamBaseUrl.host,
+        request_host: requestUrl.host,
+      },
+      500
+    );
+  }
 
   // ---- Build upstream headers ----
   const upstreamHeaders = new Headers();
@@ -109,10 +143,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // ---- Handle GET requests (e.g. /models) ----
   if (request.method === "GET") {
+    const timeout = createTimeoutSignal(UPSTREAM_TIMEOUT_MS);
     try {
       const upstreamResp = await fetch(upstreamUrl, {
         method: "GET",
         headers: upstreamHeaders,
+        signal: timeout.signal,
       });
 
       if (upstreamResp.status === 403) {
@@ -133,7 +169,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         },
       });
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Fetch failed", details: String(e) }), { status: 502 });
+      return jsonResponse({ error: "Fetch failed", details: String(e) }, 502);
+    } finally {
+      timeout.cleanup();
     }
   }
 
@@ -183,11 +221,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     const startedAt = Date.now();
     let upstreamResp: Response;
+    const timeout = createTimeoutSignal(UPSTREAM_TIMEOUT_MS);
     try {
       upstreamResp = await fetch(upstreamUrl, {
         method: "POST",
         headers: upstreamHeaders,
         body: JSON.stringify(body),
+        signal: timeout.signal,
       });
     } catch (e) {
       return jsonResponse(
@@ -196,9 +236,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           details: String(e),
           upstream_status: 0,
           upstream_duration_ms: Date.now() - startedAt,
+          upstream_timeout_ms: UPSTREAM_TIMEOUT_MS,
         },
         502
       );
+    } finally {
+      timeout.cleanup();
     }
 
     const upstreamDuration = Date.now() - startedAt;
