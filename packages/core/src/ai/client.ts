@@ -37,7 +37,8 @@ function isCrossOriginBrowserRequest(resolvedBaseUrl: string): boolean {
 function normalizeProviderError(
     error: unknown,
     provider: TranslationOptions['provider'],
-    resolvedBaseUrl: string
+    resolvedBaseUrl: string,
+    abortReason?: unknown
 ): Error {
     if (!(error instanceof Error)) {
         return new Error(String(error));
@@ -55,7 +56,17 @@ function normalizeProviderError(
 
     if (error.name === 'AbortError') {
         const message = error.message || '';
-        if (message.includes('timed out') || message.includes('timeout')) {
+        const reasonText = typeof abortReason === 'string'
+            ? abortReason
+            : abortReason instanceof Error
+                ? abortReason.message
+                : '';
+        if (
+            message.includes('timed out') ||
+            message.includes('timeout') ||
+            reasonText.includes('timed out') ||
+            reasonText.includes('timeout')
+        ) {
             return new Error(
                 `The translation request timed out while waiting for the Ollama response stream from ${new URL(resolvedBaseUrl).origin}.`
             );
@@ -216,7 +227,7 @@ export const translateText = async (
             }
         }
     } catch (error) {
-        throw normalizeProviderError(error, provider, resolvedBaseUrl);
+        throw normalizeProviderError(error, provider, resolvedBaseUrl, requestController.signal.reason);
     } finally {
         if (requestTimeoutId) {
             clearTimeout(requestTimeoutId);
