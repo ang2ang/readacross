@@ -190,7 +190,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             setCurrentOriginalText('');
 
         } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            if (err.name === 'AbortError' || err.message?.includes('abort')) {
+            if (controller.signal.aborted) {
                 setError('Translation stopped by user.');
             } else {
                 setError(err.message || 'Translation failed');
@@ -203,7 +203,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
 
     const handleStop = () => {
         if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+            abortControllerRef.current.abort('User stopped translation');
             abortControllerRef.current = null;
         }
     };

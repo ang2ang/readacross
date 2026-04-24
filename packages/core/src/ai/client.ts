@@ -4,6 +4,20 @@ import type { TranslationOptions } from '../types/index.js';
 const REQUEST_TIMEOUT_MS = 45000;
 const STREAM_IDLE_TIMEOUT_MS = 15000;
 
+type ChatCompletionResponse = {
+    choices?: Array<{
+        message?: {
+            content?: unknown;
+        };
+    }>;
+    message?: {
+        content?: unknown;
+    };
+    error?: {
+        message?: string;
+    } | string;
+};
+
 function normalizeLocalOllamaBaseUrl(baseUrl: string): string {
     const trimmed = baseUrl.trim().replace(/\/+$/, '');
 
@@ -68,12 +82,43 @@ function normalizeProviderError(
             reasonText.includes('timeout')
         ) {
             return new Error(
-                `The translation request timed out while waiting for the Ollama response stream from ${new URL(resolvedBaseUrl).origin}.`
+                `The translation request timed out while waiting for the Ollama response from ${new URL(resolvedBaseUrl).origin}.`
             );
         }
     }
 
     return error;
+}
+
+function extractTextContent(content: unknown): string {
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return (content as Array<{ type?: string; text?: string }>)
+            .filter(item => item.type === 'text' && typeof item.text === 'string')
+            .map(item => item.text as string)
+            .join('');
+    }
+
+    return '';
+}
+
+function parseErrorText(responseText: string): string {
+    try {
+        const parsed = JSON.parse(responseText) as ChatCompletionResponse;
+        if (typeof parsed.error === 'string') {
+            return parsed.error;
+        }
+        if (parsed.error?.message) {
+            return parsed.error.message;
+        }
+    } catch {
+        // Fall through to raw text.
+    }
+
+    return responseText.trim().slice(0, 800);
 }
 
 function createRequestController(signal?: AbortSignal): {
@@ -149,6 +194,73 @@ export const translateText = async (
 
     const resolvedBaseUrl = resolveBaseUrl(baseUrl, provider);
     const requestController = createRequestController(signal);
+    const isOllamaProvider = provider === 'local' || provider === 'hosted';
+
+    let requestTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let streamIdleTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    requestTimeoutId = setTimeout(() => {
+        requestController.abort('Request timed out');
+    }, REQUEST_TIMEOUT_MS);
+
+    if (isOllamaProvider) {
+        try {
+            const headers: Record<string, string> = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            };
+
+            if (apiKey) {
+                headers.Authorization = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(`${resolvedBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+                method: 'POST',
+                headers,
+                signal: requestController.signal,
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: text },
+                    ],
+                    stream: false,
+                    temperature,
+                    think: false,
+                }),
+            });
+
+            const responseText = await response.text();
+            if (!response.ok) {
+                const details = parseErrorText(responseText);
+                throw new Error(`Ollama proxy returned ${response.status}${details ? `: ${details}` : ''}`);
+            }
+
+            let parsed: ChatCompletionResponse;
+            try {
+                parsed = JSON.parse(responseText) as ChatCompletionResponse;
+            } catch {
+                throw new Error(`Ollama proxy returned invalid JSON: ${responseText.trim().slice(0, 800)}`);
+            }
+
+            const fullTranslation = extractTextContent(parsed.choices?.[0]?.message?.content)
+                || extractTextContent(parsed.message?.content);
+
+            if (!fullTranslation) {
+                throw new Error('Ollama returned an empty translation response.');
+            }
+
+            onStream?.(fullTranslation);
+            return fullTranslation;
+        } catch (error) {
+            throw normalizeProviderError(error, provider, resolvedBaseUrl, requestController.signal.reason);
+        } finally {
+            if (requestTimeoutId) {
+                clearTimeout(requestTimeoutId);
+            }
+            requestController.cleanup();
+        }
+    }
 
     const client = new OpenAI({
         apiKey: apiKey || 'dummy-key',
@@ -157,8 +269,6 @@ export const translateText = async (
     });
 
     let fullTranslation = '';
-    let requestTimeoutId: ReturnType<typeof setTimeout> | undefined;
-    let streamIdleTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const resetStreamIdleTimeout = () => {
         if (streamIdleTimeoutId) {
@@ -169,12 +279,6 @@ export const translateText = async (
         }, STREAM_IDLE_TIMEOUT_MS);
     };
 
-    requestTimeoutId = setTimeout(() => {
-        requestController.abort('Request timed out');
-    }, REQUEST_TIMEOUT_MS);
-
-    const isOllamaProvider = provider === 'local' || provider === 'hosted';
-    const shouldUseStreaming = !isOllamaProvider;
     const requestOptions = { signal: requestController.signal };
     const requestBody = {
         model,
@@ -182,49 +286,27 @@ export const translateText = async (
             { role: 'system' as const, content: systemPrompt },
             { role: 'user' as const, content: text }
         ],
-        stream: shouldUseStreaming,
         temperature,
-        ...(isOllamaProvider ? { think: false } : {})
     };
 
     try {
-        if (shouldUseStreaming) {
-            const response = await client.chat.completions.create(
-                { ...requestBody, stream: true },
-                requestOptions
-            );
+        const response = await client.chat.completions.create(
+            { ...requestBody, stream: true },
+            requestOptions
+        );
+        resetStreamIdleTimeout();
+
+        for await (const chunk of response) {
+            if (requestController.signal.aborted) {
+                throw new DOMException('Aborted', 'AbortError');
+            }
+
             resetStreamIdleTimeout();
-
-            for await (const chunk of response) {
-                if (requestController.signal.aborted) {
-                    throw new DOMException('Aborted', 'AbortError');
-                }
-
-                resetStreamIdleTimeout();
-                const content = chunk.choices[0]?.delta?.content || '';
-                if (content && onStream) {
-                    onStream(content);
-                }
-                fullTranslation += content;
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content && onStream) {
+                onStream(content);
             }
-        } else {
-            const response = await client.chat.completions.create(
-                { ...requestBody, stream: false },
-                requestOptions
-            );
-            const content = response.choices[0]?.message?.content;
-            fullTranslation = typeof content === 'string'
-                ? content
-                : Array.isArray(content)
-                    ? (content as Array<{ type?: string; text?: string }>)
-                        .filter(item => item.type === 'text' && typeof item.text === 'string')
-                        .map(item => item.text as string)
-                        .join('')
-                    : '';
-
-            if (fullTranslation && onStream) {
-                onStream(fullTranslation);
-            }
+            fullTranslation += content;
         }
     } catch (error) {
         throw normalizeProviderError(error, provider, resolvedBaseUrl, requestController.signal.reason);

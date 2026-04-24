@@ -53,6 +53,22 @@ const FORCE_THINK_DISABLED = true;
 // Default max_tokens when the client does not specify one.
 const DEFAULT_MAX_TOKENS = 4096;
 
+function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      ...headers,
+    },
+  });
+}
+
+async function readResponsePreview(response: Response): Promise<string> {
+  const text = await response.text();
+  return text.trim().slice(0, 1000);
+}
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
 
@@ -165,11 +181,27 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       body.max_tokens = DEFAULT_MAX_TOKENS;
     }
 
-    const upstreamResp = await fetch(upstreamUrl, {
-      method: "POST",
-      headers: upstreamHeaders,
-      body: JSON.stringify(body),
-    });
+    const startedAt = Date.now();
+    let upstreamResp: Response;
+    try {
+      upstreamResp = await fetch(upstreamUrl, {
+        method: "POST",
+        headers: upstreamHeaders,
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      return jsonResponse(
+        {
+          error: "Upstream fetch failed",
+          details: String(e),
+          upstream_status: 0,
+          upstream_duration_ms: Date.now() - startedAt,
+        },
+        502
+      );
+    }
+
+    const upstreamDuration = Date.now() - startedAt;
 
     // Determine if this is a streaming response
     const contentType = upstreamResp.headers.get("Content-Type") || "";
@@ -177,7 +209,26 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     const responseHeaders: Record<string, string> = {
       "Access-Control-Allow-Origin": "*",
+      "X-Upstream-Status": String(upstreamResp.status),
+      "X-Upstream-Duration-Ms": String(upstreamDuration),
     };
+
+    if (!upstreamResp.ok) {
+      return jsonResponse(
+        {
+          error: `Upstream returned ${upstreamResp.status}`,
+          upstream_status: upstreamResp.status,
+          upstream_content_type: contentType,
+          upstream_duration_ms: upstreamDuration,
+          upstream_body: await readResponsePreview(upstreamResp),
+        },
+        upstreamResp.status,
+        {
+          "X-Upstream-Status": String(upstreamResp.status),
+          "X-Upstream-Duration-Ms": String(upstreamDuration),
+        }
+      );
+    }
 
     if (isStreaming) {
       responseHeaders["Content-Type"] = "text/event-stream";
