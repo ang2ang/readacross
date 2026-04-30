@@ -22,6 +22,44 @@ self.addEventListener('activate', (event: any) => {
 // Translation progress tracking
 let translationProgress = { translated: 0, total: 0, active: false }
 
+const TRANSLATION_CACHE_MAX_ENTRIES = 1500
+const translationResultCache = new Map<string, string>()
+const inFlightTranslations = new Map<string, Promise<string>>()
+
+function getTranslationRequestCacheKey(
+  settings: Awaited<ReturnType<typeof getSettings>>,
+  effectiveStyle: PromptStyle,
+  text: string
+) {
+  return JSON.stringify({
+    provider: settings.provider,
+    baseUrl: settings.baseUrl,
+    model: settings.model,
+    temperature: settings.temperature,
+    style: effectiveStyle,
+    targetLang: settings.targetLang,
+    text
+  })
+}
+
+function getCachedTranslation(key: string): string | undefined {
+  const cached = translationResultCache.get(key)
+  if (cached === undefined) return undefined
+
+  // Refresh insertion order for a tiny LRU cache.
+  translationResultCache.delete(key)
+  translationResultCache.set(key, cached)
+  return cached
+}
+
+function setCachedTranslation(key: string, result: string) {
+  translationResultCache.set(key, result)
+  if (translationResultCache.size > TRANSLATION_CACHE_MAX_ENTRIES) {
+    const oldestKey = translationResultCache.keys().next().value
+    if (oldestKey) translationResultCache.delete(oldestKey)
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "TRANSLATE_TEXT") {
     handleTranslationRequest(request.text, sendResponse, request.promptStyle)
@@ -260,7 +298,8 @@ CRITICAL RULES:
 
 async function handleTranslationRequest(text: string, sendResponse: (response: any) => void, promptStyleOverride?: PromptStyle) {
   try {
-    const { provider, apiKey, baseUrl, model, temperature, style, targetLang } = await getSettings()
+    const settings = await getSettings()
+    const { provider, apiKey, baseUrl, model, temperature, style, targetLang } = settings
 
     if (!apiKey && provider !== "local" && provider !== "hosted") {
       sendResponse({ error: "API Key is missing. Please configure it in the extension popup." })
@@ -269,19 +308,44 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
 
     const effectiveStyle = promptStyleOverride || style;
     const systemPrompt = buildSystemPrompt(effectiveStyle, targetLang)
+    const cacheKey = getTranslationRequestCacheKey(settings, effectiveStyle, text)
+    const cached = getCachedTranslation(cacheKey)
+    if (cached !== undefined) {
+      try { sendResponse({ result: cached, cached: true }) } catch (e) { console.debug("Context invalidated") }
+      return
+    }
 
+    const pending = inFlightTranslations.get(cacheKey)
+    if (pending) {
+      const result = await pending
+      try { sendResponse({ result, cached: true }) } catch (e) { console.debug("Context invalidated") }
+      return
+    }
+
+    const translationPromise = (async () => {
+      let result = ""
+      await translateText(text, {
+        provider,
+        apiKey,
+        baseUrl,
+        model,
+        temperature,
+        systemPrompt,
+        onStream: (chunk) => {
+          result += chunk
+        }
+      })
+      setCachedTranslation(cacheKey, result)
+      return result
+    })()
+
+    inFlightTranslations.set(cacheKey, translationPromise)
     let result = ""
-    await translateText(text, {
-      provider,
-      apiKey,
-      baseUrl,
-      model,
-      temperature,
-      systemPrompt,
-      onStream: (chunk) => {
-        result += chunk
-      }
-    })
+    try {
+      result = await translationPromise
+    } finally {
+      inFlightTranslations.delete(cacheKey)
+    }
 
     try { sendResponse({ result }) } catch (e) { console.debug("Context invalidated") }
   } catch (error: any) {

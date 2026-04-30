@@ -11,7 +11,7 @@ export const config: PlasmoCSConfig = {
 const processedBlocks = new WeakSet<HTMLElement>()
 
 // Cache for instant translation of recycled DOM nodes (Virtual DOM / Infinite scroll)
-// Key: normalized original text, Value: translated text
+// Key: translation settings fingerprint + original text, Value: translated text
 const translationCache = new Map<string, string>()
 
 // Concurrency Queue to prevent network errors (e.g. ERR_INSUFFICIENT_RESOURCES)
@@ -48,6 +48,7 @@ const apiQueue = new TranslationQueue()
 let isTranslationActive = false
 let translationState = { translated: 0, total: 0, active: false }
 let currentTargetLang = "简体中文" // Default, will be fetched on start
+let currentCacheContext = "target=简体中文"
 
 // Observers
 let intersectionObserver: IntersectionObserver | null = null
@@ -63,6 +64,10 @@ function reportProgress() {
       active: translationState.active
     }).catch(() => { })
   } catch { }
+}
+
+function getTranslationCacheKey(text: string): string {
+  return `${currentCacheContext}\n${text}`
 }
 
 // Inject global styles for loading indicators
@@ -236,7 +241,7 @@ async function translateBlock(block: HTMLElement) {
     return
   }
 
-  const normalizedKey = rawText
+  const normalizedKey = getTranslationCacheKey(rawText)
   const text = rawText // alias used below
 
   // --- Skip pure proper-name blocks, URLs, or date/stats blocks ---
@@ -377,6 +382,52 @@ function injectErrorIndicator(originalBlock: HTMLElement, errorMsg: string) {
   originalBlock.appendChild(wrapper)
 }
 
+function restoreCachedTranslations(root: Node) {
+  const restoredBlocks = new Set<HTMLElement>()
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function (node) {
+        if (!node.textContent || node.textContent.trim().length === 0) {
+          return NodeFilter.FILTER_REJECT
+        }
+        const parent = node.parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+
+        if (parent.closest('script, style, noscript, code, [data-readacross-type], footer, nav, header, aside, [role="navigation"], [role="contentinfo"], [role="banner"], [role="complementary"], [data-testid="sidebarColumn"]')) {
+          return NodeFilter.FILTER_REJECT
+        }
+
+        return NodeFilter.FILTER_ACCEPT
+      }
+    }
+  )
+
+  let currentNode = walker.nextNode()
+  while (currentNode) {
+    const rawParent = currentNode.parentElement
+    if (rawParent) {
+      const block = getClosestBlockElement(rawParent)
+      if (!restoredBlocks.has(block) && !block.querySelector(':scope > [data-readacross-type]')) {
+        const rawText = getOriginalInnerText(block)
+        const cached = translationCache.get(getTranslationCacheKey(rawText))
+        if (cached && cached !== "[NO_TRANSLATE]") {
+          block.setAttribute('data-readacross-processed', 'true')
+          block.setAttribute('data-readacross-original-length', rawText.length.toString())
+          processedBlocks.add(block)
+          block.querySelectorAll('*').forEach(el => {
+            processedBlocks.add(el as HTMLElement)
+          })
+          injectBlockTranslation(block, cached)
+          restoredBlocks.add(block)
+        }
+      }
+    }
+    currentNode = walker.nextNode()
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Continuous Global Translation Engine
 // -----------------------------------------------------------------------------
@@ -471,10 +522,26 @@ function observeDOMChanges() {
     if (!isTranslationActive) return
 
     let needsScan = false
+    let needsCacheRestore = false
+    const restoreRoots = new Set<Node>()
     for (const mutation of mutations) {
       if (mutation.type === 'characterData') {
         needsScan = true
+        restoreRoots.add(mutation.target.parentElement || document.body)
         break
+      }
+      if (mutation.removedNodes.length > 0) {
+        for (let i = 0; i < mutation.removedNodes.length; i++) {
+          const node = mutation.removedNodes[i]
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement
+            if (el.hasAttribute('data-readacross-type') || el.querySelector('[data-readacross-type]')) {
+              needsCacheRestore = true
+              restoreRoots.add(mutation.target as Node)
+              break
+            }
+          }
+        }
       }
       if (mutation.addedNodes.length > 0) {
         // Simple check to skip tiny noise mutations
@@ -484,10 +551,14 @@ function observeDOMChanges() {
             const el = node as HTMLElement
             if (!el.hasAttribute('data-readacross-type')) {
               needsScan = true
+              needsCacheRestore = true
+              restoreRoots.add(el)
               break
             }
           } else if (node.nodeType === Node.TEXT_NODE) {
             needsScan = true
+            needsCacheRestore = true
+            restoreRoots.add(node.parentElement || document.body)
             break
           }
         }
@@ -495,9 +566,12 @@ function observeDOMChanges() {
       if (needsScan) break
     }
 
-    if (needsScan) {
+    if (needsScan || needsCacheRestore) {
       // Provide a tiny delay to allow batching of React/Vue render cycles
-      setTimeout(() => scanAndQueueTranslation(document.body), 100)
+      setTimeout(() => {
+        restoreRoots.forEach(root => restoreCachedTranslations(root))
+        scanAndQueueTranslation(document.body, false)
+      }, 100)
     }
   })
 
@@ -508,7 +582,11 @@ function observeDOMChanges() {
   })
 }
 
-function scanAndQueueTranslation(root: Node) {
+function scanAndQueueTranslation(root: Node, shouldRestoreCached = true) {
+  if (shouldRestoreCached) {
+    restoreCachedTranslations(root)
+  }
+
   let newBlocks = getTranslatableBlocks(root)
 
   if (newBlocks.length === 0) return
@@ -558,6 +636,8 @@ function startPeriodicRecovery() {
   recoveryInterval = window.setInterval(() => {
     if (!isTranslationActive) return
 
+    restoreCachedTranslations(document.body)
+
     const processedElements = document.querySelectorAll('[data-readacross-processed="true"]')
     processedElements.forEach(block => {
       if (!block.isConnected) return
@@ -567,7 +647,7 @@ function startPeriodicRecovery() {
       if (!hasOverlay) {
         // Translation was lost! Recycled Virtual DOM node.
         const rawText = getOriginalInnerText(block as HTMLElement)
-        const cached = translationCache.get(rawText)
+        const cached = translationCache.get(getTranslationCacheKey(rawText))
         if (cached && cached !== "[NO_TRANSLATE]") {
           injectBlockTranslation(block as HTMLElement, cached)
         }
@@ -590,6 +670,14 @@ async function enableContinuousTranslation() {
     if (response && response.targetLang) {
       currentTargetLang = response.targetLang
     }
+    currentCacheContext = JSON.stringify({
+      provider: response?.provider || "hosted",
+      baseUrl: response?.baseUrl || "",
+      model: response?.model || "",
+      temperature: response?.temperature ?? "",
+      style: response?.style || "General",
+      targetLang: currentTargetLang
+    })
 
   } catch (e) {
     console.warn("Could not fetch targetLang before translating.", e)

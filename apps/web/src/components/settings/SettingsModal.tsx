@@ -274,40 +274,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     <div className="space-y-4">
                         <label className="block text-sm font-medium text-slate-700">Provider</label>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="grid grid-cols-2 gap-2">
                             <button
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'hosted' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                aria-pressed={draft.provider === 'hosted'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'hosted' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('hosted')}
                             >
                                 ✨ Hosted
                             </button>
                             <button
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'deepseek' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                aria-pressed={draft.provider === 'deepseek'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'deepseek' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('deepseek')}
                             >
                                 DeepSeek
                             </button>
                             <button
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'openai' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                aria-pressed={draft.provider === 'openai'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'openai' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('openai')}
                             >
                                 OpenAI
                             </button>
                             <button
-                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                aria-pressed={draft.provider === 'local'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('local')}
                             >
-                                Ollama
+                                Local LLM
                             </button>
                         </div>
                         {draft.provider === 'hosted' && (
                             <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
-                                🟢 Using site-hosted model — no API key or URL needed.
+                                🟢 Using the site-hosted model — no API key or local model URL needed.
                             </p>
                         )}
                         {draft.provider === 'local' && (
                             <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
-                                Fill in your Ollama host, for example <code>http://192.168.1.20:11434</code>. The app will automatically use the OpenAI-compatible <code>/v1</code> endpoint.
+                                Connect to your own local model server, for example Ollama at <code>http://192.168.1.20:11434</code>. The app will automatically use the OpenAI-compatible <code>/v1</code> endpoint.
                             </p>
                         )}
                     </div>
