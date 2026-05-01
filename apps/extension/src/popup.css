@@ -156,6 +156,51 @@ h1 {
   border: 1px solid #bbf7d0;
 }
 
+/* ── Obsidian export ───────── */
+.obsidian-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+}
+
+.obsidian-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.obsidian-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.obsidian-btn {
+  min-width: 0;
+  padding: 8px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.obsidian-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

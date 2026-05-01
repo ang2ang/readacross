@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from "react"
 import { useExtensionSettings } from "~hooks/useExtensionSettings"
-import { ToggleLeft, ToggleRight, Languages, Thermometer, Key, Server, MessageSquare, BookOpen, TextQuote } from "lucide-react"
+import { ToggleLeft, ToggleRight, Languages, Thermometer, Key, Server, MessageSquare, BookOpen, FileText, Copy, Download } from "lucide-react"
 import type { Provider, PromptStyle } from "@readacross/core"
 import { AppIcon } from "~components/AppIcon"
 
 import "./popup.css"
+
+type ObsidianPageNote = {
+  markdown: string
+  fileName: string
+  defaultPath: string
+}
 
 function IndexPopup() {
   const settings = useExtensionSettings()
@@ -12,6 +18,7 @@ function IndexPopup() {
   const [progress, setProgress] = useState<{ translated: number; total: number; active: boolean } | null>(null)
   const [currentHostname, setCurrentHostname] = useState<string | null>(null)
   const [isPageTranslated, setIsPageTranslated] = useState(false)
+  const [obsidianMsg, setObsidianMsg] = useState<string | null>(null)
 
   // Load current tab hostname + translation state
   useEffect(() => {
@@ -74,6 +81,62 @@ function IndexPopup() {
     } catch { }
   }, [])
 
+  const getObsidianPageNote = useCallback(async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+    const activeTab = tabs[0]
+    if (!activeTab?.id || !activeTab.url) {
+      throw new Error("No active page found")
+    }
+
+    const response = await chrome.runtime.sendMessage({
+      type: "GET_OBSIDIAN_PAGE_NOTE",
+      tabId: activeTab.id,
+      url: activeTab.url
+    }).catch((err) => {
+      throw new Error(err?.message || "Could not contact the extension background script.")
+    })
+
+    if (response?.error) {
+      throw new Error(response.error)
+    }
+
+    if (!response || typeof response.markdown !== "string" || response.markdown.length === 0) {
+      throw new Error("No translated page content has been captured yet. Translate the page again, then save it.")
+    }
+
+    return response as ObsidianPageNote
+  }, [])
+
+  const isObsidianSuccess = obsidianMsg?.startsWith("Copied ") || obsidianMsg?.startsWith("Downloaded ")
+
+  const handleCopyObsidianMarkdown = useCallback(async () => {
+    setObsidianMsg(null)
+    try {
+      const note = await getObsidianPageNote()
+      await navigator.clipboard.writeText(note.markdown)
+      setObsidianMsg(`Copied ${note.defaultPath}`)
+    } catch (err: any) {
+      setObsidianMsg(err?.message || "No translated page content yet")
+    }
+  }, [getObsidianPageNote])
+
+  const handleDownloadObsidianMarkdown = useCallback(async () => {
+    setObsidianMsg(null)
+    try {
+      const note = await getObsidianPageNote()
+      const blob = new Blob([note.markdown], { type: "text/markdown;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = note.fileName
+      link.click()
+      URL.revokeObjectURL(url)
+      setObsidianMsg(`Downloaded ${note.fileName}`)
+    } catch (err: any) {
+      setObsidianMsg(err?.message || "No translated page content yet")
+    }
+  }, [getObsidianPageNote])
+
   const isTranslating = progress?.active && progress.translated < progress.total
   const isDone = progress && !progress.active || (progress && progress.translated >= progress.total && progress.total > 0)
 
@@ -133,6 +196,29 @@ function IndexPopup() {
         {isDone && progress && progress.total > 0 && (
           <div className="status-msg status-done">
             ✓ Translated {progress.total} blocks
+          </div>
+        )}
+      </div>
+
+      {/* Obsidian export */}
+      <div className="obsidian-section">
+        <div className="obsidian-title">
+          <FileText size={14} />
+          <span>Save page translation to Obsidian</span>
+        </div>
+        <div className="obsidian-actions">
+          <button className="obsidian-btn" onClick={handleCopyObsidianMarkdown}>
+            <Copy size={13} />
+            Copy Markdown
+          </button>
+          <button className="obsidian-btn" onClick={handleDownloadObsidianMarkdown}>
+            <Download size={13} />
+            Download .md
+          </button>
+        </div>
+        {obsidianMsg && (
+          <div className={`status-msg ${isObsidianSuccess ? "status-done" : "status-error"}`}>
+            {obsidianMsg}
           </div>
         )}
       </div>

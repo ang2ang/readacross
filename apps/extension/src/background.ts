@@ -1,7 +1,7 @@
-import { translateText, buildSystemPrompt } from "@readacross/core"
+import { translateText, buildSystemPrompt, buildObsidianNote } from "@readacross/core"
 import { Storage } from "@plasmohq/storage"
 import { STORAGE_KEYS, DEFAULT_HOSTED_BASE_URL } from "./hooks/useExtensionSettings"
-import type { Provider, PromptStyle } from "@readacross/core"
+import type { ObsidianTranslationEntry, Provider, PromptStyle } from "@readacross/core"
 
 const storage = new Storage()
 
@@ -25,6 +25,121 @@ let translationProgress = { translated: 0, total: 0, active: false }
 const TRANSLATION_CACHE_MAX_ENTRIES = 1500
 const translationResultCache = new Map<string, string>()
 const inFlightTranslations = new Map<string, Promise<string>>()
+
+type TranslationAssetContext = {
+  sourceType?: "extension-page" | "extension-selection"
+  pageUrl?: string
+  pageTitle?: string
+  blockIndex?: number
+}
+
+type PageTranslationAsset = {
+  tabId: number
+  url: string
+  title: string
+  createdAt: string
+  provider: Provider
+  model: string
+  targetLang: string
+  style: PromptStyle | string
+  entries: Array<ObsidianTranslationEntry & { blockIndex: number }>
+}
+
+const pageTranslationAssets = new Map<string, PageTranslationAsset>()
+const PAGE_ASSET_STORAGE_PREFIX = "readacross_obsidian_page_asset:"
+
+function getPageAssetKey(tabId: number, url: string) {
+  return `${tabId}:${url}`
+}
+
+function getPageAssetStorageKey(tabId: number, url: string) {
+  return `${PAGE_ASSET_STORAGE_PREFIX}${getPageAssetKey(tabId, url)}`
+}
+
+function persistPageTranslationAsset(asset: PageTranslationAsset) {
+  chrome.storage.local.set({
+    [getPageAssetStorageKey(asset.tabId, asset.url)]: asset
+  }).catch(() => { })
+}
+
+async function loadPageTranslationAsset(tabId: number, url: string): Promise<PageTranslationAsset | null> {
+  const stored = await chrome.storage.local.get(getPageAssetStorageKey(tabId, url))
+  return stored[getPageAssetStorageKey(tabId, url)] || null
+}
+
+function recordPageTranslationAsset(
+  context: TranslationAssetContext | undefined,
+  sender: chrome.runtime.MessageSender,
+  settings: Awaited<ReturnType<typeof getSettings>>,
+  effectiveStyle: PromptStyle | string,
+  originalText: string,
+  translatedText: string
+) {
+  if (!context || context.sourceType !== "extension-page") return
+  if (!translatedText || translatedText.trim() === "[NO_TRANSLATE]") return
+
+  const tabId = sender.tab?.id
+  const url = context.pageUrl || sender.tab?.url
+  if (!tabId || !url) return
+
+  const key = getPageAssetKey(tabId, url)
+  const createdAt = new Date().toISOString()
+  const asset = pageTranslationAssets.get(key) || {
+    tabId,
+    url,
+    title: context.pageTitle || sender.tab?.title || new URL(url).hostname,
+    createdAt,
+    provider: settings.provider,
+    model: settings.model,
+    targetLang: settings.targetLang,
+    style: effectiveStyle,
+    entries: []
+  }
+
+  const blockIndex = context.blockIndex ?? asset.entries.length
+  const existing = asset.entries.find(entry => entry.blockIndex === blockIndex && entry.sourceText === originalText)
+  if (existing) {
+    existing.translatedText = translatedText
+    persistPageTranslationAsset(asset)
+    return
+  }
+
+  asset.entries.push({
+    id: `ext-${blockIndex}`,
+    sourceText: originalText,
+    translatedText,
+    createdAt,
+    blockIndex
+  })
+  asset.entries.sort((a, b) => a.blockIndex - b.blockIndex)
+  pageTranslationAssets.set(key, asset)
+  persistPageTranslationAsset(asset)
+}
+
+async function buildPageObsidianMarkdown(tabId: number, url: string) {
+  const exact = pageTranslationAssets.get(getPageAssetKey(tabId, url))
+  const fallback = [...pageTranslationAssets.values()]
+    .filter(asset => asset.tabId === tabId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+  const asset = exact || await loadPageTranslationAsset(tabId, url) || fallback
+  if (!asset || asset.entries.length === 0) {
+    return null
+  }
+
+  return buildObsidianNote({
+    title: asset.title,
+    sourceType: "extension-page",
+    sourceLabel: "ReadAcross Browser Extension",
+    sourceUrl: asset.url,
+    createdAt: asset.createdAt,
+    provider: asset.provider,
+    model: asset.model,
+    targetLanguage: asset.targetLang,
+    promptStyle: asset.style,
+    readacrossId: `readacross-extension-${tabId}-${asset.url}`,
+    entries: asset.entries.map(({ blockIndex: _blockIndex, ...entry }) => entry)
+  })
+}
 
 function getTranslationRequestCacheKey(
   settings: Awaited<ReturnType<typeof getSettings>>,
@@ -62,7 +177,7 @@ function setCachedTranslation(key: string, result: string) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "TRANSLATE_TEXT") {
-    handleTranslationRequest(request.text, sendResponse, request.promptStyle)
+    handleTranslationRequest(request, sender, sendResponse)
     return true
   }
 
@@ -87,6 +202,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "GET_SETTINGS") {
     getSettings().then(settings => {
       try { sendResponse(settings) } catch (e) { console.debug("Context invalidated") }
+    })
+    return true
+  }
+  if (request.type === "GET_OBSIDIAN_PAGE_NOTE") {
+    buildPageObsidianMarkdown(request.tabId, request.url).then(note => {
+      if (!note) {
+        try { sendResponse({ error: "No translated page content has been captured yet." }) } catch (e) { console.debug("Context invalidated") }
+      } else {
+        try {
+          sendResponse({
+            markdown: note.markdown,
+            fileName: note.fileName,
+            defaultPath: note.defaultPath
+          })
+        } catch (e) { console.debug("Context invalidated") }
+      }
+    }).catch(error => {
+      try {
+        sendResponse({ error: error?.message || "Failed to build Obsidian Markdown." })
+      } catch (e) { console.debug("Context invalidated") }
     })
     return true
   }
@@ -296,8 +431,11 @@ CRITICAL RULES:
   }
 }
 
-async function handleTranslationRequest(text: string, sendResponse: (response: any) => void, promptStyleOverride?: PromptStyle) {
+async function handleTranslationRequest(request: any, sender: chrome.runtime.MessageSender, sendResponse: (response: any) => void) {
   try {
+    const text = request.text as string
+    const promptStyleOverride = request.promptStyle as PromptStyle | undefined
+    const assetContext = request.assetContext as TranslationAssetContext | undefined
     const settings = await getSettings()
     const { provider, apiKey, baseUrl, model, temperature, style, targetLang } = settings
 
@@ -311,6 +449,7 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
     const cacheKey = getTranslationRequestCacheKey(settings, effectiveStyle, text)
     const cached = getCachedTranslation(cacheKey)
     if (cached !== undefined) {
+      recordPageTranslationAsset(assetContext, sender, settings, effectiveStyle, text, cached)
       try { sendResponse({ result: cached, cached: true }) } catch (e) { console.debug("Context invalidated") }
       return
     }
@@ -318,6 +457,7 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
     const pending = inFlightTranslations.get(cacheKey)
     if (pending) {
       const result = await pending
+      recordPageTranslationAsset(assetContext, sender, settings, effectiveStyle, text, result)
       try { sendResponse({ result, cached: true }) } catch (e) { console.debug("Context invalidated") }
       return
     }
@@ -347,6 +487,7 @@ async function handleTranslationRequest(text: string, sendResponse: (response: a
       inFlightTranslations.delete(cacheKey)
     }
 
+    recordPageTranslationAsset(assetContext, sender, settings, effectiveStyle, text, result)
     try { sendResponse({ result }) } catch (e) { console.debug("Context invalidated") }
   } catch (error: any) {
     console.error("Translation error:", error)

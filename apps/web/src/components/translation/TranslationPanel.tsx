@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square, Copy, Check } from 'lucide-react';
-import { translateText, buildSystemPrompt } from '@readacross/core';
+import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square, Copy, Check, Download, FileText } from 'lucide-react';
+import { translateText, buildSystemPrompt, buildObsidianNote } from '@readacross/core';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useFileStore } from '../../store/useFileStore';
 
@@ -28,6 +28,9 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
     const clearNewContentStart = useFileStore(state => state.clearNewContentStart);
     const pastedText = useFileStore(state => state.pastedText);
     const inputMode = useFileStore(state => state.inputMode);
+    const file = useFileStore(state => state.file);
+    const fileType = useFileStore(state => state.fileType);
+    const images = useFileStore(state => state.images);
     const [history, setHistory] = useState<TranslationEntry[]>([]);
     const [currentTranslation, setCurrentTranslation] = useState('');
     const [currentOriginalText, setCurrentOriginalText] = useState('');
@@ -38,6 +41,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
     const entryIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController | null>(null);
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [obsidianStatus, setObsidianStatus] = useState<string | null>(null);
     const [hasSelection, setHasSelection] = useState(false);
 
     // Listen for selection changes to update button state in real-time
@@ -94,6 +98,66 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
             setTimeout(() => setCopiedId(null), 2000);
         } catch (err) {
             console.error('Failed to copy:', err);
+        }
+    };
+
+    const getSourceTitle = () => {
+        if (file) return file.name;
+        if (inputMode === 'text') return 'Pasted Text';
+        if (inputMode === 'image') return `${images.length} Image${images.length > 1 ? 's' : ''} OCR`;
+        return 'ReadAcross Translation';
+    };
+
+    const getSourceLabel = () => {
+        if (fileType) return `ReadAcross Web Reader (${fileType.toUpperCase()})`;
+        if (inputMode === 'image') return 'ReadAcross Web Reader (OCR)';
+        if (inputMode === 'text') return 'ReadAcross Web Reader (Pasted Text)';
+        return 'ReadAcross Web Reader';
+    };
+
+    const buildCurrentObsidianNote = () => buildObsidianNote({
+        title: getSourceTitle(),
+        sourceType: 'web-reader',
+        sourceLabel: getSourceLabel(),
+        provider: settings.provider,
+        model: settings.model,
+        targetLanguage: settings.targetLanguage,
+        promptStyle: settings.promptStyle,
+        entries: history.map(entry => ({
+            id: `web-${entry.id}`,
+            sourceText: entry.originalText,
+            translatedText: entry.translation,
+            createdAt: entry.timestamp.toISOString(),
+        })),
+    });
+
+    const handleCopyObsidianMarkdown = async () => {
+        if (history.length === 0) return;
+        try {
+            const note = buildCurrentObsidianNote();
+            await navigator.clipboard.writeText(note.markdown);
+            setObsidianStatus(`Copied Markdown for ${note.defaultPath}`);
+        } catch (err) {
+            console.error('Failed to copy Obsidian Markdown:', err);
+            setObsidianStatus('Failed to copy Markdown.');
+        }
+    };
+
+    const handleDownloadObsidianMarkdown = () => {
+        if (history.length === 0) return;
+        try {
+            const note = buildCurrentObsidianNote();
+            const blob = new Blob([note.markdown], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = note.fileName;
+            link.click();
+            URL.revokeObjectURL(url);
+            setObsidianStatus(`Downloaded ${note.fileName}`);
+        } catch (err) {
+            console.error('Failed to download Obsidian Markdown:', err);
+            setObsidianStatus('Failed to download Markdown.');
         }
     };
 
@@ -252,6 +316,7 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
         setCurrentTranslation('');
         setCurrentOriginalText('');
         setError(null);
+        setObsidianStatus(null);
     };
 
     if (!isOpen) return null;
@@ -369,6 +434,35 @@ export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isO
 
             {/* Footer */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
+                {history.length > 0 && (
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="truncate">Save to Obsidian</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={handleCopyObsidianMarkdown}
+                                className="flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                            >
+                                <Copy className="w-3.5 h-3.5" />
+                                Copy Markdown
+                            </button>
+                            <button
+                                onClick={handleDownloadObsidianMarkdown}
+                                className="flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                Download .md
+                            </button>
+                        </div>
+                        {obsidianStatus && (
+                            <div className="rounded-md bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">
+                                {obsidianStatus}
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div className="flex items-center justify-between">
                     <div className="relative">
                         <select
