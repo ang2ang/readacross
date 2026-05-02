@@ -49,7 +49,6 @@ let isTranslationActive = false
 let translationState = { translated: 0, total: 0, active: false }
 let currentTargetLang = "简体中文" // Default, will be fetched on start
 let currentCacheContext = "target=简体中文"
-let nextObsidianBlockIndex = 0
 
 // Observers
 let intersectionObserver: IntersectionObserver | null = null
@@ -244,7 +243,6 @@ async function translateBlock(block: HTMLElement) {
 
   const normalizedKey = getTranslationCacheKey(rawText)
   const text = rawText // alias used below
-  const obsidianBlockIndex = nextObsidianBlockIndex++
 
   // --- Skip pure proper-name blocks, URLs, or date/stats blocks ---
   if (isPureProperName(text) || isPureUrl(text) || isSocialStatsOrDateTime(text)) {
@@ -310,13 +308,7 @@ async function translateBlock(block: HTMLElement) {
     try {
       const response = await chrome.runtime.sendMessage({
         type: "TRANSLATE_TEXT",
-        text: text,
-        assetContext: {
-          sourceType: "extension-page",
-          pageUrl: window.location.href,
-          pageTitle: document.title,
-          blockIndex: obsidianBlockIndex
-        }
+        text: text
       })
 
       // Remove loading placeholder
@@ -671,7 +663,6 @@ async function enableContinuousTranslation() {
 
 
   isTranslationActive = true
-  nextObsidianBlockIndex = 0
 
   // Fetch user settings to know the target language for language detection
   try {

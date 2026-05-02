@@ -44,7 +44,6 @@ const apiQueue = new TranslationQueue()
 // State
 let isTranslationActive = false
 let translationState = { translated: 0, total: 0, active: false }
-let nextObsidianBlockIndex = 0
 
 // Observers
 let intersectionObserver: IntersectionObserver | null = null
@@ -192,7 +191,6 @@ async function translateBlock(block: HTMLElement) {
 
   const normalizedKey = rawText
   const text = rawText
-  const obsidianBlockIndex = nextObsidianBlockIndex++
 
   if (isPureUrl(text) || shouldSkipCodeLine(text)) {
     processedBlocks.add(block)
@@ -223,13 +221,7 @@ async function translateBlock(block: HTMLElement) {
       const response = await chrome.runtime.sendMessage({
         type: "TRANSLATE_TEXT",
         text: text,
-        promptStyle: "Code", // Or specifically "GitHub File" if you want to add that to core later
-        assetContext: {
-          sourceType: "extension-page",
-          pageUrl: window.location.href,
-          pageTitle: document.title,
-          blockIndex: obsidianBlockIndex
-        }
+        promptStyle: "Code" // Or specifically "GitHub File" if you want to add that to core later
       })
 
       if (placeholder.parentNode) {
@@ -386,7 +378,6 @@ function startPeriodicRecovery() {
 
 async function enableContinuousTranslation() {
   isTranslationActive = true
-  nextObsidianBlockIndex = 0
 
   if (intersectionObserver) intersectionObserver.disconnect()
 

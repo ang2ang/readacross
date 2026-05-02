@@ -1,6 +1,6 @@
 import type { PromptStyle, Provider } from '../types/index.js';
 
-export type ObsidianSourceType = 'web-reader' | 'extension-page' | 'extension-selection';
+export type ObsidianSourceType = 'web-reader' | 'extension-page';
 
 export interface ObsidianTranslationEntry {
     id: string;
@@ -33,7 +33,6 @@ export interface ObsidianNoteOutput {
 const SOURCE_LABELS: Record<ObsidianSourceType, string> = {
     'web-reader': 'ReadAcross Web Reader',
     'extension-page': 'ReadAcross Browser Extension',
-    'extension-selection': 'ReadAcross Browser Extension Selection',
 };
 
 function hashString(value: string): string {
@@ -98,19 +97,6 @@ function getDatePart(isoDate: string): string {
 
 function getSourceName(input: ObsidianNoteInput): string {
     return input.sourceLabel || SOURCE_LABELS[input.sourceType] || 'ReadAcross';
-}
-
-export function createObsidianTranslationEntry(
-    sourceText: string,
-    translatedText: string,
-    createdAt = new Date().toISOString()
-): ObsidianTranslationEntry {
-    return {
-        id: `tr-${hashString(`${createdAt}\n${sourceText}\n${translatedText}`)}`,
-        sourceText,
-        translatedText,
-        createdAt,
-    };
 }
 
 export function buildObsidianNote(input: ObsidianNoteInput): ObsidianNoteOutput {

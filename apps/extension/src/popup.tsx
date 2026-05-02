@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useExtensionSettings } from "~hooks/useExtensionSettings"
 import { ToggleLeft, ToggleRight, Languages, Thermometer, Key, Server, MessageSquare, BookOpen, FileText, Copy, Download } from "lucide-react"
+import { buildObsidianNote } from "@readacross/core"
 import type { Provider, PromptStyle } from "@readacross/core"
 import { AppIcon } from "~components/AppIcon"
 
@@ -10,6 +11,64 @@ type ObsidianPageNote = {
   markdown: string
   fileName: string
   defaultPath: string
+}
+
+type VisibleTranslationCollection = {
+  pageTitle?: string
+  pageUrl?: string
+  entries?: Array<{
+    sourceText: string
+    translatedText: string
+    createdAt: string
+  }>
+}
+
+function collectReadAcrossTranslationsFromPage(): VisibleTranslationCollection {
+  const getOriginalInnerText = (el: HTMLElement): string => {
+    const wrappers = el.querySelectorAll<HTMLElement>(':scope > [data-readacross-type]')
+    const displays: string[] = []
+
+    wrappers.forEach(wrapper => {
+      displays.push(wrapper.style.display)
+      wrapper.style.display = 'none'
+    })
+
+    const text = (el.innerText || el.textContent || '').replace(/\n{3,}/g, '\n\n').trim()
+
+    wrappers.forEach((wrapper, index) => {
+      wrapper.style.display = displays[index]
+    })
+
+    return text
+  }
+
+  const seen = new Set<string>()
+  const entries: VisibleTranslationCollection["entries"] = []
+
+  document.querySelectorAll<HTMLElement>('[data-readacross-type="translation"]').forEach(wrapper => {
+    const parent = wrapper.parentElement
+    const translatedText = (wrapper.innerText || wrapper.textContent || '').trim()
+    if (!parent || !translatedText) return
+
+    const sourceText = getOriginalInnerText(parent)
+    if (!sourceText) return
+
+    const key = `${sourceText}\n${translatedText}`
+    if (seen.has(key)) return
+    seen.add(key)
+
+    entries.push({
+      sourceText,
+      translatedText,
+      createdAt: new Date().toISOString()
+    })
+  })
+
+  return {
+    pageTitle: document.title,
+    pageUrl: window.location.href,
+    entries
+  }
 }
 
 function IndexPopup() {
@@ -88,24 +147,39 @@ function IndexPopup() {
       throw new Error("No active page found")
     }
 
-    const response = await chrome.runtime.sendMessage({
-      type: "GET_OBSIDIAN_PAGE_NOTE",
-      tabId: activeTab.id,
-      url: activeTab.url
-    }).catch((err) => {
-      throw new Error(err?.message || "Could not contact the extension background script.")
-    })
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      func: collectReadAcrossTranslationsFromPage
+    }).catch(() => [])
+    const visible = injected[0]?.result as VisibleTranslationCollection | undefined
 
-    if (response?.error) {
-      throw new Error(response.error)
+    if (visible?.entries?.length) {
+      const note = buildObsidianNote({
+        title: visible.pageTitle || activeTab.title || "ReadAcross Translation",
+        sourceType: "extension-page",
+        sourceLabel: "ReadAcross Browser Extension",
+        sourceUrl: visible.pageUrl || activeTab.url,
+        provider: settings.provider,
+        model: settings.effectiveModel,
+        targetLanguage: settings.targetLang,
+        promptStyle: settings.promptStyle,
+        entries: visible.entries.map((entry, index) => ({
+          id: `visible-${index}`,
+          sourceText: entry.sourceText,
+          translatedText: entry.translatedText,
+          createdAt: entry.createdAt
+        }))
+      })
+
+      return {
+        markdown: note.markdown,
+        fileName: note.fileName,
+        defaultPath: note.defaultPath
+      }
     }
 
-    if (!response || typeof response.markdown !== "string" || response.markdown.length === 0) {
-      throw new Error("No translated page content has been captured yet. Translate the page again, then save it.")
-    }
-
-    return response as ObsidianPageNote
-  }, [])
+    throw new Error("No visible ReadAcross translations were found on this page.")
+  }, [settings.effectiveModel, settings.promptStyle, settings.provider, settings.targetLang])
 
   const isObsidianSuccess = obsidianMsg?.startsWith("Copied ") || obsidianMsg?.startsWith("Downloaded ")
 
