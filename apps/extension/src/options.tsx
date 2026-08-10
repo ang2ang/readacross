@@ -105,6 +105,12 @@ function OptionsPage() {
             >
               OpenAI
             </button>
+            <button
+              className={`opt-provider-btn ${settings.provider === "ollama" ? "active" : ""}`}
+              onClick={() => { settings.setProvider("ollama"); settings.setModel(""); }}
+            >
+              Ollama
+            </button>
           </div>
         </div>
 
@@ -119,20 +125,22 @@ function OptionsPage() {
         {settings.provider !== "hosted" && (
           <>
             <div className="opt-form-group">
-              <label>{settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : "Local"} API Key</label>
+              <label>{settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : settings.provider === "ollama" ? "Ollama" : "Local"} API Key</label>
               <input
                 type="password"
-                value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.localKey}
+                value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.provider === "ollama" ? settings.ollamaKey : settings.localKey}
                 onChange={(e) => {
                   if (settings.provider === "deepseek") {
                     settings.setDeepseekKey(e.target.value)
                   } else if (settings.provider === "openai") {
                     settings.setOpenAiKey(e.target.value)
+                  } else if (settings.provider === "ollama") {
+                    settings.setOllamaKey(e.target.value)
                   } else {
                     settings.setLocalKey(e.target.value)
                   }
                 }}
-                placeholder={settings.provider === "local" ? "Usually not required for local models" : "sk-..."}
+                placeholder={settings.provider === "local" ? "Usually not required for local models" : settings.provider === "ollama" ? "Ollama API key" : "sk-..."}
               />
               <p className="hint">Stored locally in your browser. Never sent to third parties.</p>
             </div>
@@ -141,17 +149,19 @@ function OptionsPage() {
               <label>Base URL</label>
               <input
                 type="text"
-                value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.localBaseUrl}
+                value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.provider === "ollama" ? settings.ollamaBaseUrl : settings.localBaseUrl}
                 onChange={(e) => {
                   if (settings.provider === "deepseek") {
                     settings.setDeepseekBaseUrl(e.target.value)
                   } else if (settings.provider === "openai") {
                     settings.setOpenAiBaseUrl(e.target.value)
+                  } else if (settings.provider === "ollama") {
+                    settings.setOllamaBaseUrl(e.target.value)
                   } else {
                     settings.setLocalBaseUrl(e.target.value)
                   }
                 }}
-                placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
+                placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : settings.provider === "ollama" ? "https://ollama.com" : "http://localhost:11434/v1"}
               />
             </div>
           </>

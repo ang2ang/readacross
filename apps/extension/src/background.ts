@@ -176,20 +176,24 @@ async function getSettings() {
       ? await storage.get<string>(STORAGE_KEYS.API_KEY_DEEPSEEK)
       : provider === "openai"
         ? await storage.get<string>(STORAGE_KEYS.API_KEY_OPENAI)
-        : await storage.get<string>(STORAGE_KEYS.API_KEY_LOCAL)
+        : provider === "ollama"
+          ? await storage.get<string>(STORAGE_KEYS.API_KEY_OLLAMA)
+          : await storage.get<string>(STORAGE_KEYS.API_KEY_LOCAL)
   const baseUrl = provider === "hosted"
     ? await storage.get<string>(STORAGE_KEYS.BASE_URL_HOSTED) || DEFAULT_HOSTED_BASE_URL
     : provider === "deepseek"
       ? await storage.get<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK) || "https://api.deepseek.com"
       : provider === "openai"
         ? await storage.get<string>(STORAGE_KEYS.BASE_URL_OPENAI) || "https://api.openai.com/v1"
-        : await storage.get<string>(STORAGE_KEYS.BASE_URL_LOCAL) || "http://localhost:11434/v1"
+        : provider === "ollama"
+          ? await storage.get<string>(STORAGE_KEYS.BASE_URL_OLLAMA) || "https://ollama.com"
+          : await storage.get<string>(STORAGE_KEYS.BASE_URL_LOCAL) || "http://localhost:11434/v1"
   const style = await storage.get<PromptStyle>(STORAGE_KEYS.PROMPT_STYLE) || "General"
   const targetLang = await storage.get<string>(STORAGE_KEYS.TARGET_LANG) || "简体中文"
   const customModel = await storage.get<string>(STORAGE_KEYS.MODEL) || ""
   const temperature = await storage.get<number>(STORAGE_KEYS.TEMPERATURE) ?? 0.3
 
-  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
+  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : provider === "ollama" ? "deepseek-v4-flash" : "qwen2.5:7b"
   const model = customModel || defaultModel
 
   return { provider, apiKey, baseUrl, style, targetLang, model, temperature }

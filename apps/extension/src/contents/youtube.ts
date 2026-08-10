@@ -30,6 +30,7 @@ interface TimedCue {
 }
 let timedCues: TimedCue[] = []
 let transcriptReady = false
+const DEFAULT_CUE_DURATION_MS = 3000
 
 // Shadow DOM elements
 let overlayHost: HTMLElement | null = null
@@ -277,8 +278,8 @@ function parseJSON3Captions(jsonText: string): TimedCue[] {
       if (!ev.segs || !Array.isArray(ev.segs)) continue
       const text = ev.segs.map((s: any) => s.utf8 || "").join("").trim()
       if (!text || text === "\n") continue
-      const startMs = ev.tStartMs || 0
-      const durMs = ev.dDurationMs || 0
+      const startMs = Number(ev.tStartMs) || 0
+      const durMs = Number(ev.dDurationMs) || 0
       cues.push({
         startMs,
         endMs: startMs + durMs,
@@ -287,7 +288,7 @@ function parseJSON3Captions(jsonText: string): TimedCue[] {
       })
     }
 
-    return mergeFragments(cues)
+    return normalizeCueTimeline(mergeFragments(cues))
   } catch (e) {
 
     return []
@@ -358,7 +359,28 @@ function parseTranscriptXML(xmlText: string): TimedCue[] {
     })
   }
 
-  return mergeFragments(cues)
+  return normalizeCueTimeline(mergeFragments(cues))
+}
+
+function normalizeCueTimeline(cues: TimedCue[]): TimedCue[] {
+  const sorted = cues
+    .filter(cue => Number.isFinite(cue.startMs) && Number.isFinite(cue.endMs))
+    .sort((a, b) => a.startMs - b.startMs)
+
+  return sorted.map((cue, index) => {
+    const nextCue = sorted[index + 1]
+    const fallbackEndMs = cue.endMs > cue.startMs
+      ? cue.endMs
+      : cue.startMs + DEFAULT_CUE_DURATION_MS
+    const endMs = nextCue && nextCue.startMs > cue.startMs
+      ? Math.min(fallbackEndMs, nextCue.startMs)
+      : fallbackEndMs
+
+    return {
+      ...cue,
+      endMs
+    }
+  })
 }
 
 // =============================================================================
@@ -416,11 +438,15 @@ function getVideoElement(): HTMLVideoElement | null {
 }
 
 function findCueAtTime(timeMs: number): TimedCue | null {
-  // Binary-search-friendly: cues are sorted by startMs
+  let activeCue: TimedCue | null = null
   for (let i = 0; i < timedCues.length; i++) {
     const cue = timedCues[i]
     if (timeMs >= cue.startMs && timeMs < cue.endMs) {
-      return cue
+      activeCue = cue
+      continue
+    }
+    if (activeCue && cue.startMs > timeMs) {
+      return activeCue
     }
     // Also check small gaps: if we're between two cues, show the previous one
     // (YouTube often has micro-gaps between cues)
@@ -431,7 +457,7 @@ function findCueAtTime(timeMs: number): TimedCue | null {
       }
     }
   }
-  return null
+  return activeCue
 }
 
 function startRenderLoop() {
@@ -778,4 +804,3 @@ window.addEventListener("yt-navigate-finish", () => {
     if (isTranslationActive) activate()
   }, 1000)
 })
-

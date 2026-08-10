@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   BASE_URL_DEEPSEEK: "settings_base_url_deepseek",
   API_KEY_LOCAL: "settings_api_key_local",
   BASE_URL_LOCAL: "settings_base_url_local",
+  API_KEY_OLLAMA: "settings_api_key_ollama",
+  BASE_URL_OLLAMA: "settings_base_url_ollama",
   BASE_URL_HOSTED: "settings_base_url_hosted",
   MODEL: "settings_model",
   PROMPT_STYLE: "settings_prompt_style",
@@ -26,9 +28,11 @@ export function useExtensionSettings() {
   const [openAiKey, setOpenAiKey] = useStorage<string>(STORAGE_KEYS.API_KEY_OPENAI, "")
   const [deepseekKey, setDeepseekKey] = useStorage<string>(STORAGE_KEYS.API_KEY_DEEPSEEK, "")
   const [localKey, setLocalKey] = useStorage<string>(STORAGE_KEYS.API_KEY_LOCAL, "")
+  const [ollamaKey, setOllamaKey] = useStorage<string>(STORAGE_KEYS.API_KEY_OLLAMA, "")
   const [openAiBaseUrl, setOpenAiBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_OPENAI, "https://api.openai.com/v1")
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_DEEPSEEK, "https://api.deepseek.com")
   const [localBaseUrl, setLocalBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_LOCAL, "http://localhost:11434/v1")
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_OLLAMA, "https://ollama.com")
   const [hostedBaseUrl, setHostedBaseUrl] = useStorage<string>(STORAGE_KEYS.BASE_URL_HOSTED, DEFAULT_HOSTED_BASE_URL)
   const [model, setModel] = useStorage<string>(STORAGE_KEYS.MODEL, "")
   const [promptStyle, setPromptStyle] = useStorage<PromptStyle>(STORAGE_KEYS.PROMPT_STYLE, "General")
@@ -54,9 +58,9 @@ export function useExtensionSettings() {
     setAlwaysTranslateSitesRaw(JSON.stringify(next))
   }
 
-  const apiKey = provider === "hosted" ? "" : provider === "deepseek" ? deepseekKey : provider === "openai" ? openAiKey : localKey
-  const baseUrl = provider === "hosted" ? hostedBaseUrl : provider === "deepseek" ? deepseekBaseUrl : provider === "openai" ? openAiBaseUrl : localBaseUrl
-  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : "qwen2.5:7b"
+  const apiKey = provider === "hosted" ? "" : provider === "deepseek" ? deepseekKey : provider === "openai" ? openAiKey : provider === "ollama" ? ollamaKey : localKey
+  const baseUrl = provider === "hosted" ? hostedBaseUrl : provider === "deepseek" ? deepseekBaseUrl : provider === "openai" ? openAiBaseUrl : provider === "ollama" ? ollamaBaseUrl : localBaseUrl
+  const defaultModel = provider === "hosted" ? "qwen3.5:9b" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o-mini" : provider === "ollama" ? "deepseek-v4-flash" : "qwen2.5:7b"
   const effectiveModel = model || defaultModel
 
   return {
@@ -64,10 +68,12 @@ export function useExtensionSettings() {
     openAiKey, setOpenAiKey,
     deepseekKey, setDeepseekKey,
     localKey, setLocalKey,
+    ollamaKey, setOllamaKey,
     openAiBaseUrl, setOpenAiBaseUrl,
     deepseekBaseUrl, setDeepseekBaseUrl,
     hostedBaseUrl, setHostedBaseUrl,
     localBaseUrl, setLocalBaseUrl,
+    ollamaBaseUrl, setOllamaBaseUrl,
     model, setModel,
     promptStyle, setPromptStyle,
     targetLang, setTargetLang,

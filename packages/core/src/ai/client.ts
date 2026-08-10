@@ -194,7 +194,7 @@ export const translateText = async (
 
     const resolvedBaseUrl = resolveBaseUrl(baseUrl, provider);
     const requestController = createRequestController(signal);
-    const isOllamaProvider = provider === 'local' || provider === 'hosted';
+    const isOllamaProvider = provider === 'local' || provider === 'hosted' || provider === 'ollama';
 
     let requestTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let streamIdleTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -214,11 +214,24 @@ export const translateText = async (
                 headers.Authorization = `Bearer ${apiKey}`;
             }
 
-            const response = await fetch(`${resolvedBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
-                method: 'POST',
-                headers,
-                signal: requestController.signal,
-                body: JSON.stringify({
+            // Ollama Cloud API uses /api/chat (native format);
+            // local/hosted use /chat/completions (OpenAI-compatible).
+            const isOllamaCloud = provider === 'ollama';
+            const chatEndpoint = isOllamaCloud
+                ? `${resolvedBaseUrl.replace(/\/+$/, '')}/api/chat`
+                : `${resolvedBaseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+            const requestBody = isOllamaCloud
+                ? {
+                    model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: text },
+                    ],
+                    stream: false,
+                    options: { temperature },
+                }
+                : {
                     model,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -227,7 +240,13 @@ export const translateText = async (
                     stream: false,
                     temperature,
                     think: false,
-                }),
+                };
+
+            const response = await fetch(chatEndpoint, {
+                method: 'POST',
+                headers,
+                signal: requestController.signal,
+                body: JSON.stringify(requestBody),
             });
 
             const responseText = await response.text();

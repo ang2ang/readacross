@@ -303,6 +303,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             >
                                 Local LLM
                             </button>
+                            <button
+                                aria-pressed={draft.provider === 'ollama'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'ollama' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => handleProviderChange('ollama')}
+                            >
+                                Ollama
+                            </button>
                         </div>
                         {draft.provider === 'hosted' && (
                             <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
@@ -312,6 +319,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         {draft.provider === 'local' && (
                             <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
                                 Connect to your own local model server, for example Ollama at <code>http://192.168.1.20:11434</code>. The app will automatically use the OpenAI-compatible <code>/v1</code> endpoint.
+                            </p>
+                        )}
+                        {draft.provider === 'ollama' && (
+                            <p className="text-xs text-violet-700 bg-violet-50 px-3 py-2 rounded-lg border border-violet-100">
+                                Uses the <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline">Ollama Cloud API</a> directly. Create an API key at <a href="https://ollama.com/settings/keys" target="_blank" rel="noopener noreferrer" className="underline">ollama.com/settings/keys</a>. Free tier available.
                             </p>
                         )}
                     </div>
@@ -360,7 +372,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             value={draft.model}
                             onChange={(e) => setDraft(d => ({ ...d, model: e.target.value }))}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            placeholder={draft.provider === 'hosted' ? 'qwen3.5:9b' : draft.provider === 'deepseek' ? 'deepseek-chat' : draft.provider === 'openai' ? 'gpt-4o' : 'qwen2.5:7b'}
+                            placeholder={draft.provider === 'hosted' ? 'qwen3.5:9b' : draft.provider === 'deepseek' ? 'deepseek-chat' : draft.provider === 'openai' ? 'gpt-4o' : draft.provider === 'ollama' ? 'deepseek-v4-flash' : 'qwen2.5:7b'}
                         />
                     </div>
 

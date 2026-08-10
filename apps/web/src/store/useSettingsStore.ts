@@ -9,6 +9,7 @@ const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; model: string }> = 
     hosted:   { baseUrl: '/api/openai',              model: 'qwen3.5:9b' },
     deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
     openai:   { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    ollama:   { baseUrl: 'https://ollama.com',        model: 'deepseek-v4-flash' },
     local:    { baseUrl: 'http://localhost:11434/v1',  model: 'qwen2.5:7b' },
 };
 
