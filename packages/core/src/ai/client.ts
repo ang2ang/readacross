@@ -216,10 +216,22 @@ export const translateText = async (
 
             // Ollama Cloud API uses /api/chat (native format);
             // local/hosted use /chat/completions (OpenAI-compatible).
+            // For web app CORS bypass: when using the default ollama.com URL,
+            // route through our own /api/ollama/chat proxy instead.
             const isOllamaCloud = provider === 'ollama';
-            const chatEndpoint = isOllamaCloud
-                ? `${resolvedBaseUrl.replace(/\/+$/, '')}/api/chat`
-                : `${resolvedBaseUrl.replace(/\/+$/, '')}/chat/completions`;
+            let chatEndpoint: string;
+            if (isOllamaCloud) {
+                const isDefaultOllamaUrl = /^https?:\/\/(www\.)?ollama\.com\/?$/i.test(resolvedBaseUrl.replace(/\/+$/, ''));
+                if (isDefaultOllamaUrl && typeof window !== 'undefined') {
+                    // Web app: use server-side proxy to bypass CORS
+                    chatEndpoint = '/api/ollama/chat';
+                } else {
+                    // Extension or custom Ollama URL: call directly
+                    chatEndpoint = `${resolvedBaseUrl.replace(/\/+$/, '')}/api/chat`;
+                }
+            } else {
+                chatEndpoint = `${resolvedBaseUrl.replace(/\/+$/, '')}/chat/completions`;
+            }
 
             const requestBody = isOllamaCloud
                 ? {

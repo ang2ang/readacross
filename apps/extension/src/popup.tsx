@@ -335,7 +335,6 @@ function IndexPopup() {
                 settings.setModel("");
               }}
             >
-              <option value="hosted">✨ Hosted</option>
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
               <option value="ollama">Ollama</option>

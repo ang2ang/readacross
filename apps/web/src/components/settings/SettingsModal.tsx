@@ -276,13 +276,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         <label className="block text-sm font-medium text-slate-700">Provider</label>
                         <div className="grid grid-cols-2 gap-2">
                             <button
-                                aria-pressed={draft.provider === 'hosted'}
-                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'hosted' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
-                                onClick={() => handleProviderChange('hosted')}
-                            >
-                                ✨ Hosted
-                            </button>
-                            <button
                                 aria-pressed={draft.provider === 'deepseek'}
                                 className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'deepseek' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('deepseek')}
@@ -297,25 +290,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 OpenAI
                             </button>
                             <button
-                                aria-pressed={draft.provider === 'local'}
-                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
-                                onClick={() => handleProviderChange('local')}
-                            >
-                                Local LLM
-                            </button>
-                            <button
                                 aria-pressed={draft.provider === 'ollama'}
                                 className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'ollama' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('ollama')}
                             >
                                 Ollama
                             </button>
+                            <button
+                                aria-pressed={draft.provider === 'local'}
+                                className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                                onClick={() => handleProviderChange('local')}
+                            >
+                                Local LLM
+                            </button>
                         </div>
-                        {draft.provider === 'hosted' && (
-                            <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
-                                🟢 Using the site-hosted model — no API key or local model URL needed.
-                            </p>
-                        )}
                         {draft.provider === 'local' && (
                             <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
                                 Connect to your own local model server, for example Ollama at <code>http://192.168.1.20:11434</code>. The app will automatically use the OpenAI-compatible <code>/v1</code> endpoint.
@@ -328,8 +316,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         )}
                     </div>
 
-                    {/* API Key — hidden for hosted/local provider */}
-                    {draft.provider !== 'hosted' && draft.provider !== 'local' && (
+                    {/* API Key — hidden for local provider */}
+                    {draft.provider !== 'local' && (
                         <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                 <Key className="w-4 h-4 text-slate-400" />
@@ -346,9 +334,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         </div>
                     )}
 
-                    {/* Base URL — hidden for hosted provider (managed server-side) */}
-                    {draft.provider !== 'hosted' && (
-                        <div className="space-y-2">
+                    {/* Base URL */}
+                    <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                 <Server className="w-4 h-4 text-slate-400" />
                                 Base URL
@@ -360,7 +347,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                         </div>
-                    )}
 
                     <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">

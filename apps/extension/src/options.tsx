@@ -88,12 +88,6 @@ function OptionsPage() {
           <label>AI Provider</label>
           <div className="opt-provider-toggle">
             <button
-              className={`opt-provider-btn ${settings.provider === "hosted" ? "active" : ""}`}
-              onClick={() => { settings.setProvider("hosted"); settings.setModel(""); }}
-            >
-              ✨ Hosted
-            </button>
-            <button
               className={`opt-provider-btn ${settings.provider === "deepseek" ? "active" : ""}`}
               onClick={() => { settings.setProvider("deepseek"); settings.setModel(""); }}
             >
@@ -114,58 +108,46 @@ function OptionsPage() {
           </div>
         </div>
 
-        {settings.provider === "hosted" && (
-          <div className="opt-form-group">
-            <p style={{ fontSize: 13, color: "#059669", background: "#ecfdf5", padding: "10px 12px", borderRadius: 8, margin: 0, border: "1px solid #a7f3d0" }}>
-              🟢 Using site-hosted model — no API key or URL configuration needed. All credentials are managed server-side.
-            </p>
-          </div>
-        )}
+        <div className="opt-form-group">
+          <label>{settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : settings.provider === "ollama" ? "Ollama" : "Local"} API Key</label>
+          <input
+            type="password"
+            value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.provider === "ollama" ? settings.ollamaKey : settings.localKey}
+            onChange={(e) => {
+              if (settings.provider === "deepseek") {
+                settings.setDeepseekKey(e.target.value)
+              } else if (settings.provider === "openai") {
+                settings.setOpenAiKey(e.target.value)
+              } else if (settings.provider === "ollama") {
+                settings.setOllamaKey(e.target.value)
+              } else {
+                settings.setLocalKey(e.target.value)
+              }
+            }}
+            placeholder={settings.provider === "local" ? "Usually not required for local models" : settings.provider === "ollama" ? "Ollama API key" : "sk-..."}
+          />
+          <p className="hint">Stored locally in your browser. Never sent to third parties.</p>
+        </div>
 
-        {settings.provider !== "hosted" && (
-          <>
-            <div className="opt-form-group">
-              <label>{settings.provider === "deepseek" ? "DeepSeek" : settings.provider === "openai" ? "OpenAI" : settings.provider === "ollama" ? "Ollama" : "Local"} API Key</label>
-              <input
-                type="password"
-                value={settings.provider === "deepseek" ? settings.deepseekKey : settings.provider === "openai" ? settings.openAiKey : settings.provider === "ollama" ? settings.ollamaKey : settings.localKey}
-                onChange={(e) => {
-                  if (settings.provider === "deepseek") {
-                    settings.setDeepseekKey(e.target.value)
-                  } else if (settings.provider === "openai") {
-                    settings.setOpenAiKey(e.target.value)
-                  } else if (settings.provider === "ollama") {
-                    settings.setOllamaKey(e.target.value)
-                  } else {
-                    settings.setLocalKey(e.target.value)
-                  }
-                }}
-                placeholder={settings.provider === "local" ? "Usually not required for local models" : settings.provider === "ollama" ? "Ollama API key" : "sk-..."}
-              />
-              <p className="hint">Stored locally in your browser. Never sent to third parties.</p>
-            </div>
-
-            <div className="opt-form-group">
-              <label>Base URL</label>
-              <input
-                type="text"
-                value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.provider === "ollama" ? settings.ollamaBaseUrl : settings.localBaseUrl}
-                onChange={(e) => {
-                  if (settings.provider === "deepseek") {
-                    settings.setDeepseekBaseUrl(e.target.value)
-                  } else if (settings.provider === "openai") {
-                    settings.setOpenAiBaseUrl(e.target.value)
-                  } else if (settings.provider === "ollama") {
-                    settings.setOllamaBaseUrl(e.target.value)
-                  } else {
-                    settings.setLocalBaseUrl(e.target.value)
-                  }
-                }}
-                placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : settings.provider === "ollama" ? "https://ollama.com" : "http://localhost:11434/v1"}
-              />
-            </div>
-          </>
-        )}
+        <div className="opt-form-group">
+          <label>Base URL</label>
+          <input
+            type="text"
+            value={settings.provider === "deepseek" ? settings.deepseekBaseUrl : settings.provider === "openai" ? settings.openAiBaseUrl : settings.provider === "ollama" ? settings.ollamaBaseUrl : settings.localBaseUrl}
+            onChange={(e) => {
+              if (settings.provider === "deepseek") {
+                settings.setDeepseekBaseUrl(e.target.value)
+              } else if (settings.provider === "openai") {
+                settings.setOpenAiBaseUrl(e.target.value)
+              } else if (settings.provider === "ollama") {
+                settings.setOllamaBaseUrl(e.target.value)
+              } else {
+                settings.setLocalBaseUrl(e.target.value)
+              }
+            }}
+            placeholder={settings.provider === "deepseek" ? "https://api.deepseek.com" : settings.provider === "openai" ? "https://api.openai.com/v1" : settings.provider === "ollama" ? "https://ollama.com" : "http://localhost:11434/v1"}
+          />
+        </div>
 
         <div className="opt-form-group">
           <label>Model</label>
