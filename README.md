@@ -13,7 +13,20 @@ Read and translate documents, text, images, and webpages with AI.
 - **Seven Web interface languages** — 简体中文, English, 日本語, Français, Deutsch, Português, and 繁體中文.
 - **Browser extension** — Inline webpage translation, GitHub content, and YouTube captions when available.
 
-## Screenshots
+## Browser extension
+
+1. [Download the extension ZIP](downloads/readacross-extension-chrome.zip?raw=true) and extract it.
+2. Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted `readacross-extension` folder containing `manifest.json`.
+3. Open the extension popup to configure its model and target language.
+
+- **Webpages** — Translate inline, restore originals, and remember sites for automatic translation. Toggle with `Alt+T` (`Option+T` on Mac).
+- **GitHub** — Translate README/Markdown content and repository file views.
+- **YouTube** — Show original captions and translations together, synchronized with playback. Toggle with the ReadAcross button beside CC; the video must have captions.
+- **Obsidian export** — Copy or download visible page translations as Markdown, including the source link.
+
+![YouTube player showing original English captions and Chinese translations](docs/screenshots/youtube-subtitles.png)
+
+## Web app screenshots
 
 **Text, file, and image input**
 
@@ -27,7 +40,7 @@ Read and translate documents, text, images, and webpages with AI.
 
 ![EPUB reader and table of contents](docs/screenshots/epub-reader.jpg)
 
-Screenshots use sample content. The bilingual view uses a local demonstration translation.
+These Web screenshots use sample content. The bilingual text view uses a local demonstration translation.
 
 ## Run locally
 
@@ -57,7 +70,6 @@ In `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, a
 1. Choose an interface language on the home screen; configure the model and translation target in **Settings**.
 2. Paste text, upload images, or open a PDF/EPUB. In a document, click **Translate** to translate a selection or the current page/view.
 3. Use **Locate source** to check the original and **Return to reading** to resume. **Export** copies or downloads completed translations as Markdown.
-4. Configure the extension separately in its popup. Toggle webpage translation there, or use `Alt+T` (`Option+T` on Mac) on general webpages and GitHub.
 
 Document reading records are stored locally. Pasted text and image sessions are temporary; export useful translations before leaving. Translation input is sent to the selected provider or proxy.
 
