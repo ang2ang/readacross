@@ -20,7 +20,7 @@ type PagesFunction<E = unknown> = (
   }
 ) => Response | Promise<Response>;
 
-interface Env {}
+type Env = NonNullable<unknown>;
 
 const OLLAMA_CLOUD_BASE = "https://ollama.com";
 const UPSTREAM_TIMEOUT_MS = 60000;

@@ -1,0 +1,6 @@
+<!doctype html><html><meta charset="utf-8"><title>ReadAcross responsive checks</title>
+<style>body{margin:0;font:14px system-ui}nav{padding:6px;display:flex;gap:8px}iframe{border:1px solid #ccc;height:850px;display:block}button{padding:6px}</style>
+<nav><button data-width="1280">1280px</button><button data-width="1024">1024px</button><button data-width="390">390px</button></nav>
+<iframe title="ReadAcross responsive preview" width="1280" src="/"></iframe>
+<script>document.querySelectorAll('button').forEach(button=>button.onclick=()=>{document.querySelector('iframe').width=button.dataset.width})</script>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ReadAcross EPUB navigation checks</title>
+<style>#checks{position:fixed;right:16px;bottom:16px;z-index:100;background:white;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font:13px system-ui;box-shadow:0 2px 10px #0002}#results{white-space:pre-wrap;max-width:430px;max-height:320px;overflow:auto}</style>
+<div id="root"></div><aside id="checks"><button id="run">Run EPUB navigation checks</button><pre id="results">Tests actual chapter visibility at 100%, 130% and 70%. No model requests.</pre></aside>
+<script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {ReaderLayout} from '../src/components/reader/ReaderLayout.tsx';
+import {useFileStore} from '../src/store/useFileStore.ts';
+import {useReadingStore} from '../src/store/useReadingStore.ts';
+import '../src/index.css';
+
+createRoot(document.querySelector('#root')).render(React.createElement(ReaderLayout));
+const results=document.querySelector('#results');
+const button=name=>[...document.querySelectorAll('#root button')].find(el=>el.getClientRects().length && (el.textContent.trim()===name || el.getAttribute('aria-label')===name));
+const waitFor=async(condition,message,stable=0)=>{
+ const end=Date.now()+7000;let since=0;
+ while(Date.now()<end){
+  if(condition()){since ||= Date.now();if(Date.now()-since>=stable)return}else since=0;
+  await new Promise(resolve=>setTimeout(resolve,25));
+ }
+ throw Error(message+' (visible: '+[...document.querySelectorAll('#reader-content iframe')].map(f=>f.contentDocument?.title).join(', ')+')');
+};
+const visible=id=>[...document.querySelectorAll('#reader-content iframe')].some(frame=>{
+ const el=frame.contentDocument?.getElementById(id),pane=frame.closest('.epub-container');
+ if(!el||!pane)return false;
+ const r=el.getBoundingClientRect(),f=frame.getBoundingClientRect(),v=pane.getBoundingClientRect();
+ return r.width>0 && r.height>0 && f.left+r.left<v.right && f.left+r.right>v.left && f.top+r.top<v.bottom && f.top+r.bottom>v.top;
+});
+const chapter=title=>[...document.querySelectorAll('#reader-content iframe')].some(frame=>frame.contentDocument?.title===title);
+// WebKit may enforce a user minimum font size (12px in the in-app browser).
+const fontApplied=size=>[...document.querySelectorAll('#reader-content iframe')].some(frame=>frame.contentDocument?.body?.style.fontSize===size+'%' && parseFloat(frame.contentWindow.getComputedStyle(frame.contentDocument.body).fontSize)>=16*size/100-0.1);
+const position=()=>useReadingStore.getState().bridge?.getLocation()?.cfi;
+const pass=message=>{results.textContent+='PASS '+message+'\n'};
+const tocJump=async(name,title,id='start')=>{
+ if(!button(name)){button('TOC').click();await waitFor(()=>button(name),'Missing TOC entry '+name)}
+ button(name).click();
+ await waitFor(()=>chapter(title)&&visible(id),'TOC failed: '+name,400);
+};
+document.querySelector('#run').onclick=async()=>{
+ const run=document.querySelector('#run');run.disabled=true;results.textContent='';
+ try{
+  const bytes=await(await fetch('/tests/fixtures/navigation.epub')).arrayBuffer();
+  const file=new File([bytes],'navigation.epub',{type:'application/epub+zip'});
+  useFileStore.getState().setFile(file);
+  await waitFor(()=>useReadingStore.getState().ready&&useReadingStore.getState().bridge&&document.querySelector('#reader-content iframe'),'Initial book load');
+  await tocJump('Copyright','Copyright');
+  for(const size of [100,130,70]){
+   useReadingStore.getState().setFontSize(size);
+   await waitFor(()=>chapter('Copyright')&&visible('start')&&fontApplied(size),'Font layout',400);
+   if(!button('Close sidebar'))button('Open translation').click();
+   await tocJump('Chapter 1: Starting Up','Chapter 1: Starting Up');pass(size+'% initial chapter jump with sidebar open');
+   await tocJump('Chapter 2: Starting Over','Chapter 2: Starting Over');pass(size+'% encoded-path chapter jump');
+   await tocJump('Section 1.1: Details','Chapter 1: Starting Up','details');pass(size+'% nested anchor jump');
+   await tocJump('Section 1.1.1: Deep target','Chapter 1: Starting Up','deep');pass(size+'% deep nested anchor jump');
+   button('Close sidebar').click();
+   await tocJump('Chapter 2: Starting Over','Chapter 2: Starting Over');pass(size+'% chapter jump with sidebar closed');
+   await tocJump('Copyright','Copyright');
+  }
+  useReadingStore.getState().setFontSize(130);
+  await waitFor(()=>fontApplied(130),'130% reflow',400);
+  await tocJump('Chapter 1: Starting Up','Chapter 1: Starting Up');
+  const first=position();button('Next').click();
+  await waitFor(()=>position()&&position()!==first,'Next page',400);
+  button('Previous').click();await waitFor(()=>visible('start'),'Previous page',400);
+  pass('130% next / previous after TOC jump');
+  button('TOC').click();await waitFor(()=>button('Close table of contents'),'TOC open');
+  button('Close table of contents').click();await waitFor(()=>visible('start'),'Close TOC kept reading position',400);
+  pass('130% TOC open / close keeps position');
+  await tocJump('Section 1.1.1: Deep target','Chapter 1: Starting Up','deep');
+  const source=useReadingStore.getState().bridge.getLocation();
+  await tocJump('Chapter 2: Starting Over','Chapter 2: Starting Over');
+  await useReadingStore.getState().locate(source);
+  await waitFor(()=>chapter('Chapter 1: Starting Up')&&visible('deep'),'Saved source jump',400);
+  await useReadingStore.getState().goBack();
+  await waitFor(()=>chapter('Chapter 2: Starting Over')&&visible('start'),'Source return',400);
+  pass('130% source locate / return after TOC navigation');
+  button('TOC').click();await waitFor(()=>button('Chapter 1: Starting Up'),'TOC open');
+  const earlier=button('Chapter 1: Starting Up'),later=button('Chapter 2: Starting Over');earlier.click();later.click();
+  await waitFor(()=>chapter('Chapter 2: Starting Over')&&visible('start'),'Latest TOC intent',600);
+  pass('latest chapter intent wins');
+  button('TOC').click();await waitFor(()=>button('Unavailable section'),'TOC open');
+  button('Unavailable section').click();
+  await waitFor(()=>document.querySelector('[role="status"]')?.textContent.includes('could not be opened')&&chapter('Chapter 2: Starting Over'),'Invalid target feedback',400);
+  pass('unavailable section gives feedback without losing content');
+  await tocJump('Section 1.1.1: Deep target','Chapter 1: Starting Up','deep');
+  const saved=position();
+  useFileStore.getState().reset();await waitFor(()=>!document.querySelector('#reader-content'),'Close reader');
+  useFileStore.getState().setFile(file);
+  await waitFor(()=>useReadingStore.getState().ready&&useReadingStore.getState().bridge&&fontApplied(130)&&chapter('Chapter 1: Starting Up')&&visible('deep'),'Restored 130% position from '+saved,600);
+  pass('reopening restores 130% and the deep reading position');
+  await tocJump('Chapter 2: Starting Over','Chapter 2: Starting Over');pass('TOC works after restoring the book');
+  results.textContent+='ALL EPUB NAVIGATION CHECKS PASSED';
+ }catch(error){results.textContent+='FAIL '+error.message}finally{run.disabled=false}
+};
+</script></html>

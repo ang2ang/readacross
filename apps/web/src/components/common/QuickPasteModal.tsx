@@ -124,6 +124,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={resetAndClose}>
             <div
+                role="dialog" aria-modal="true" aria-label="Add more content" data-reader-modal
                 className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >

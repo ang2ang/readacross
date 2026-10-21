@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useReadingStore } from './useReadingStore';
 
 type InputMode = 'file' | 'text' | 'image';
 
@@ -64,7 +65,8 @@ export const useFileStore = create<FileState>((set, get) => ({
         const name = file.name.toLowerCase();
         const type = name.endsWith('.pdf') ? 'pdf' : name.endsWith('.epub') ? 'epub' : null;
         if (type) {
-            set({ file, fileType: type, inputMode: 'file', pastedText: null, images: [], currentImageIndex: 0, pendingAutoTranslate: false, undoState: null, canUndo: false });
+            set({ file, fileType: type, inputMode: 'file', selection: '', getPageText: null, pastedText: null, images: [], currentImageIndex: 0, pendingAutoTranslate: false, undoState: null, canUndo: false });
+            void useReadingStore.getState().open(file);
         }
     },
     selection: '',
@@ -79,8 +81,8 @@ export const useFileStore = create<FileState>((set, get) => ({
     // Multi-image support
     images: [],
     currentImageIndex: 0,
-    setImages: (images: ImageItem[]) => set({
-        images,
+    setImages: (images: ImageItem[]) => { useReadingStore.getState().close(); set({
+        images, selection: '', getPageText: null, newContentStart: null,
         currentImageIndex: 0,
         inputMode: 'image',
         file: null,
@@ -89,7 +91,7 @@ export const useFileStore = create<FileState>((set, get) => ({
         pendingAutoTranslate: images.length > 0 && images[0].extractedText !== null,
         undoState: null,
         canUndo: false
-    }),
+    }); },
     setCurrentImageIndex: (currentImageIndex: number) => {
         const images = get().images;
         if (currentImageIndex >= 0 && currentImageIndex < images.length) {
@@ -108,8 +110,8 @@ export const useFileStore = create<FileState>((set, get) => ({
     },
 
     setInputMode: (inputMode: InputMode) => set({ inputMode }),
-    setPastedText: (pastedText: string | null) => set({
-        pastedText,
+    setPastedText: (pastedText: string | null) => { useReadingStore.getState().close(); set({
+        pastedText, selection: '', getPageText: null, newContentStart: null,
         inputMode: 'text',
         file: null,
         fileType: null,
@@ -118,7 +120,7 @@ export const useFileStore = create<FileState>((set, get) => ({
         pendingAutoTranslate: true,
         undoState: null,
         canUndo: false
-    }),
+    }); },
 
     // Append text (with separator)
     appendText: (text: string) => {
@@ -190,7 +192,7 @@ export const useFileStore = create<FileState>((set, get) => ({
     pendingAutoTranslate: false,
     setPendingAutoTranslate: (pendingAutoTranslate: boolean) => set({ pendingAutoTranslate }),
 
-    reset: () => set({
+    reset: () => { useReadingStore.getState().close(); set({
         file: null,
         fileType: null,
         selection: '',
@@ -203,5 +205,5 @@ export const useFileStore = create<FileState>((set, get) => ({
         undoState: null,
         canUndo: false,
         newContentStart: null
-    }),
+    }); },
 }));

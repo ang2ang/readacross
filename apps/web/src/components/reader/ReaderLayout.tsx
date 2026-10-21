@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Settings, Minus, Plus, Type, Home, PlusCircle } from 'lucide-react';
+import { Settings, Minus, Plus, Type, ZoomIn, Home, PlusCircle, Undo2 } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
+import { useReadingStore } from '../../store/useReadingStore';
+import { TranslationShell } from './TranslationShell';
 import { PDFViewer } from './PDFViewer';
 import { EpubViewer } from './EpubViewer';
 import { TextViewer } from './TextViewer';
@@ -15,9 +17,12 @@ import Tesseract from 'tesseract.js';
 export const ReaderLayout: React.FC = () => {
     const { file, fileType, inputMode, pastedText, images, pendingAutoTranslate, canUndo, setFile, reset, setPendingAutoTranslate, appendText, appendImage, undo, clearUndo } = useFileStore();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [selectedText, setSelectedText] = useState<string | null>(null);
     const [isTranslationOpen, setIsTranslationOpen] = useState(false);
-    const [fontSize, setFontSize] = useState(100);
+    const { fontSize, setFontSize, pdfFitWidth, pdfFitPercent, session, returnLocation, locationNotice, goBack } = useReadingStore();
+    const isPdf = fileType === 'pdf';
+    const displaySize = isPdf && pdfFitWidth ? pdfFitPercent : fontSize;
+    const minSize = isPdf ? 25 : 50;
+    const maxSize = isPdf ? 300 : 150;
     const [shouldAutoTranslate, setShouldAutoTranslate] = useState(false);
     const [isQuickPasteOpen, setIsQuickPasteOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -26,21 +31,21 @@ export const ReaderLayout: React.FC = () => {
     // Determine if we have content to display
     const hasContent = file || pastedText || images.length > 0;
 
-    // Reset font size when entering reader with new content
     useEffect(() => {
-        if (hasContent) {
-            setFontSize(100);
-        }
-    }, [file, pastedText, images]);
+        void useReadingStore.getState().refresh();
+        const interval = setInterval(() => { void useReadingStore.getState().refresh(); }, 24 * 60 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
 
-    // Auto-open translation panel and trigger translation when pendingAutoTranslate is set
     useEffect(() => {
-        if (pendingAutoTranslate && hasContent) {
+        if (!pendingAutoTranslate || !hasContent || file) return;
+        const frame = requestAnimationFrame(() => {
             setIsTranslationOpen(true);
             setShouldAutoTranslate(true);
             setPendingAutoTranslate(false);
-        }
-    }, [pendingAutoTranslate, hasContent, setPendingAutoTranslate]);
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [pendingAutoTranslate, hasContent, file, setPendingAutoTranslate]);
 
     // Keyboard shortcut: Ctrl/Cmd + V to quick paste
     const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
@@ -99,17 +104,11 @@ export const ReaderLayout: React.FC = () => {
         }
     };
 
-    const handleTranslateSelection = () => {
-        let text = window.getSelection()?.toString();
-        if (!text || text.trim().length === 0) {
-            text = useFileStore.getState().selection;
-        }
-        setSelectedText(text && text.trim().length > 0 ? text : '');
-        setIsTranslationOpen(true);
-    };
+    const handleTranslateSelection = () => setIsTranslationOpen(true);
 
     const handleFontSizeChange = (delta: number) => {
-        setFontSize(prev => Math.min(150, Math.max(50, prev + delta)));
+        const next = isPdf ? (delta > 0 ? Math.floor(displaySize / 10) + 1 : Math.ceil(displaySize / 10) - 1) * 10 : displaySize + delta;
+        setFontSize(Math.min(maxSize, Math.max(minSize, next)));
     };
 
     const handleGoHome = () => {
@@ -156,7 +155,7 @@ export const ReaderLayout: React.FC = () => {
     }
 
     return (
-        <div className="h-screen flex flex-col">
+        <div className="h-dvh flex flex-col min-w-0 overflow-hidden">
             <input
                 type="file"
                 ref={fileInputRef}
@@ -166,13 +165,13 @@ export const ReaderLayout: React.FC = () => {
             />
 
             {/* Header */}
-            <header className="h-14 border-b border-slate-200 bg-white flex items-center px-4 justify-between shrink-0 z-50 shadow-sm">
-                <div className="font-semibold text-slate-700 truncate max-w-sm flex items-center gap-2">
+            <header className="h-14 border-b border-slate-200 bg-white flex items-center gap-2 px-2 sm:px-4 justify-between shrink-0 z-50 shadow-sm">
+                <div className="font-semibold text-slate-700 truncate max-w-sm min-w-0 flex items-center gap-2">
                     <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded uppercase tracking-wider">{getContentLabel()}</span>
                     <span className="truncate">{getContentName()}</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     {/* Quick Add Button - only for text/image modes */}
                     {(inputMode === 'text' || inputMode === 'image') && (
                         <>
@@ -184,51 +183,52 @@ export const ReaderLayout: React.FC = () => {
                                 <PlusCircle className="w-4 h-4" />
                                 Add
                             </button>
-                            <div className="h-6 w-px bg-slate-200" />
+                            <div className="hidden sm:block h-6 w-px bg-slate-200" />
                         </>
                     )}
 
-                    {/* Font Size Controls */}
+                    {/* PDF zoom / reflowable text size */}
                     <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
                         <button
                             onClick={() => handleFontSizeChange(-10)}
-                            disabled={fontSize <= 50}
+                            disabled={displaySize <= minSize}
                             className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                            title="Decrease font size"
+                            title={isPdf ? 'Zoom out' : 'Decrease font size'}
                         >
                             <Minus className="w-4 h-4" />
                         </button>
                         <span className="text-xs font-medium text-slate-600 w-12 text-center flex items-center justify-center gap-0.5 select-none">
-                            <Type className="w-3 h-3" />
-                            {fontSize}%
+                            {isPdf ? <ZoomIn className="w-3 h-3" /> : <Type className="w-3 h-3" />}
+                            {displaySize}%
                         </span>
                         <button
                             onClick={() => handleFontSizeChange(10)}
-                            disabled={fontSize >= 150}
+                            disabled={displaySize >= maxSize}
                             className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                            title="Increase font size"
+                            title={isPdf ? 'Zoom in' : 'Increase font size'}
                         >
                             <Plus className="w-4 h-4" />
                         </button>
                     </div>
 
                     {/* Divider */}
-                    <div className="h-6 w-px bg-slate-200" />
+                    <div className="hidden sm:block h-6 w-px bg-slate-200" />
 
                     {/* Translate Button */}
                     <button
                         onClick={handleTranslateSelection}
+                        aria-label="Open translation"
                         className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all bg-blue-50 text-blue-600 hover:bg-blue-100 cursor-pointer"
                     >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="m5 8 6 6" /><path d="m4 14 6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" />
                             <path d="m22 22-5-10-5 10" /><path d="M14 18h6" />
                         </svg>
-                        Translate
+                        <span className="hidden sm:inline">Translate</span>
                     </button>
 
                     {/* Divider */}
-                    <div className="h-6 w-px bg-slate-200" />
+                    <div className="hidden sm:block h-6 w-px bg-slate-200" />
 
                     {/* Settings Button */}
                     <button
@@ -246,26 +246,30 @@ export const ReaderLayout: React.FC = () => {
                         title="Back to Home"
                     >
                         <Home className="w-4 h-4" />
-                        New
+                        <span className="hidden sm:inline">New</span>
                     </button>
                 </div>
             </header>
 
             {/* Main Content Area with Sidebar */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 min-h-0 min-w-0 flex overflow-hidden">
                 {/* Reader Content */}
-                <div id="reader-content" className="flex-1 overflow-auto bg-slate-100 flex justify-center">
-                    <div className="w-full max-w-5xl h-full shadow-sm bg-white">
-                        {fileType === 'pdf' && <PDFViewer fontSize={fontSize} />}
-                        {fileType === 'epub' && <EpubViewer fontSize={fontSize} />}
+                <div id="reader-content" className="flex-1 min-w-0 min-h-0 overflow-hidden bg-slate-100 flex justify-center relative">
+                    <div className="w-full min-w-0 h-full shadow-sm bg-white">
+                        {fileType === 'pdf' && <PDFViewer key={session} fontSize={fontSize} />}
+                        {fileType === 'epub' && <EpubViewer key={session} fontSize={fontSize} />}
                         {inputMode === 'text' && pastedText && <TextViewer fontSize={fontSize} />}
                         {inputMode === 'image' && images.length > 0 && <ImageTextViewer fontSize={fontSize} />}
                     </div>
+                    {returnLocation && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 max-w-[95%] rounded-lg bg-white shadow-lg border border-blue-100 z-20">
+                        {locationNotice && <p role="status" className="px-3 pt-2 text-xs text-slate-500">{locationNotice}</p>}
+                        <button onClick={() => { void goBack(); }} className="mx-auto flex items-center gap-2 px-3 py-2 text-blue-600 text-sm whitespace-nowrap"><Undo2 className="w-4 h-4" />Return to reading</button>
+                    </div>}
                 </div>
 
                 {/* Translation Sidebar */}
+                <TranslationShell open={isTranslationOpen} onClose={() => setIsTranslationOpen(false)}>
                 <TranslationPanel
-                    originalText={selectedText || ''}
                     onClose={() => setIsTranslationOpen(false)}
                     isOpen={isTranslationOpen}
                     autoTranslate={shouldAutoTranslate}
@@ -277,10 +281,11 @@ export const ReaderLayout: React.FC = () => {
                             return storeSelection;
                         }
                         // Fallback to window selection for PDF/Text
-                        const windowSelection = window.getSelection()?.toString() || '';
-                        return windowSelection;
+                        const selected = window.getSelection();
+                        return selected?.anchorNode && document.getElementById('reader-content')?.contains(selected.anchorNode) ? selected.toString() : '';
                     }}
                 />
+                </TranslationShell>
             </div>
 
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

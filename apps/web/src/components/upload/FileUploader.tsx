@@ -5,6 +5,7 @@ import { InputModeSelector } from './InputModeSelector';
 import { TextInputPanel } from './TextInputPanel';
 import { ImageInputPanel } from './ImageInputPanel';
 import { SettingsModal } from '../settings/SettingsModal';
+import { RecentReading } from './RecentReading';
 
 type InputMode = 'file' | 'text' | 'image';
 
@@ -137,6 +138,8 @@ export const FileUploader: React.FC = () => {
 
             {activeMode === 'text' && <TextInputPanel />}
             {activeMode === 'image' && <ImageInputPanel />}
+
+            <RecentReading />
 
             {/* Settings Modal */}
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
