@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="#features">Features</a> •
-  <a href="#demo">Demo</a> •
+  <a href="#screenshots">Screenshots</a> •
   <a href="#installation-and-development">Development</a> •
   <a href="#usage">Usage</a> •
   <a href="#architecture">Architecture</a> •
@@ -32,11 +32,25 @@
 
 The seven-language interface and its default-target rules apply to the Web App. The extension has its own settings and interface.
 
-## Demo
+## Screenshots
 
-https://github.com/user-attachments/assets/153fa2ca-3a55-4dc0-a220-916d6eabaff4
+### Start with text, files, or images
 
-> *Introduction video showcasing ReadAcross features*
+![ReadAcross home with text, file, and image input modes](docs/screenshots/home.jpg)
+
+### Read the source beside its translation
+
+Compare the original text with a translation and copy or export completed results as Markdown.
+
+![English source and Chinese translation in the reading workspace](docs/screenshots/text-translation.jpg)
+
+### Navigate an EPUB by chapter
+
+Open the table of contents, move between chapters, and adjust the reading font size.
+
+![EPUB reader with a chapter open and its table of contents visible](docs/screenshots/epub-reader.jpg)
+
+These screenshots show the local app with sample content. The bilingual view uses a local demonstration translation.
 
 ## Installation and Development
 
