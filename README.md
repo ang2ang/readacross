@@ -1,157 +1,79 @@
-# ReadAcross Monorepo
+# <img src="apps/extension/assets/icon128.png" alt="" width="24" height="24" /> ReadAcross
 
-<p align="center">
-  <img src="apps/web/public/readacross-logo.svg" alt="ReadAcross Logo" width="120" />
-</p>
+**English** | [简体中文](README.zh-CN.md)
 
-<p align="center">
-  <strong>AI-Powered Reading & Translation Ecosystem</strong>
-</p>
+Read and translate documents, text, images, and webpages with AI.
 
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#demo">Demo</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#tech-stack">Tech Stack</a>
-</p>
+## Features
 
----
+- **PDF & EPUB** — Chapter/page navigation, PDF links, zoom, and font-size controls.
+- **Text & images** — Paste text or upload images with browser-based OCR.
+- **Bilingual reading** — Translate a selection or current page, compare both versions, and jump back to the source.
+- **Save & export** — Resume local document reading positions and completed translations; export Markdown.
+- **Seven Web interface languages** — 简体中文, English, 日本語, Français, Deutsch, Português, and 繁體中文.
+- **Browser extension** — Inline webpage translation, GitHub content, and YouTube captions when available.
 
-## ✨ Features
+## Screenshots
 
-- **📄 Multi-format Support (Web App)** - Seamlessly read PDF and EPUB documents
-- **🌐 Immersive Translating (Extension)** - Inject AI translations directly into any webpage you visit
-- **🤖 AI Translation Core** - High-quality translations powered by OpenAI's GPT models, shared across all apps
-- **🔍 OCR Recognition** - Extract text from images with built-in Tesseract.js (Web App)
-- **📝 Flexible Translation Modes** - Translate selected text or entire pages with custom Personas
-- **💾 Local Storage** - Your settings and API keys are stored securely in your browser
-- **🎨 Clean UI** - Modern, responsive interface with dark mode support
+**Text, file, and image input**
 
-## 🎬 Demo
+![Home input modes](docs/screenshots/home.jpg)
 
-{{ ... }}
+**Source and translation side by side**
 
-https://github.com/user-attachments/assets/153fa2ca-3a55-4dc0-a220-916d6eabaff4
+![English source with Chinese translation](docs/screenshots/text-translation.jpg)
 
-> *Introduction video showcasing ReadAcross features*
+**EPUB reading with a table of contents**
 
-## 🚀 Installation & Development
+![EPUB reader and table of contents](docs/screenshots/epub-reader.jpg)
 
-### Prerequisites
+Screenshots use sample content. The bilingual view uses a local demonstration translation.
 
-- Node.js 20+ (LTS recommended)
-- [pnpm](https://pnpm.io/installation) (Workspaces enabled)
+## Run locally
 
-### Quick Start
-
-This project uses **pnpm workspaces** to manage a monorepo setup.
+Requires Node.js 20.19+ within 20.x, or 22.12+, and [pnpm](https://pnpm.io/installation).
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/readacross.git
+git clone https://github.com/ang2ang/readacross.git
 cd readacross
-
-# Install pnpm if you don't have it globally
-# (or use `curl -fsSL https://get.pnpm.io/install.sh | sh -` if npm fails)
-npm install -g pnpm
-
-# Install dependencies across all workspaces
 pnpm install
-
-# Start development servers (runs both Web App and Extension builder)
-pnpm run dev
+pnpm --filter @readacross/web dev
 ```
 
-- The **Web App** will be available at `http://localhost:5173`
-- The **Extension** will build into `apps/extension/build/chrome-mv3-dev`. Load this unpacked folder into Chromium-based browsers via `chrome://extensions`.
+Open the URL printed by Vite (usually `http://localhost:5173`). Configure a provider in **Settings**: OpenAI, DeepSeek, Ollama Cloud, Local LLM, or the hosted proxy.
 
-### Build for Production
+Hosted mode needs a configured model backend. During Vite development, `/api/openai` forwards to Ollama at `http://localhost:11434/v1` by default. For a remote upstream, set `OLLAMA_PRIVATE_BASE_URL` in `apps/web/.dev.vars` and restart Vite.
+
+To develop the extension:
 
 ```bash
-# Build all workspaces
-pnpm run build
+pnpm --filter @readacross/extension dev
 ```
 
-## 📖 Usage
+In `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `apps/extension/build/chrome-mv3-dev`. Refresh webpage tabs after rebuilding or reloading the extension.
 
-1. **Zero-Config Hosted Model** - By default, the app seamlessly connects to our site-hosted serverless proxy. No API key or URL configuration is required!
-2. **Bring Your Own Key (BYOK)** - Prefer another provider? Click the settings icon in either the Web App or the Extension popup and enter your OpenAI or DeepSeek API key.
-3. **Web App (`apps/web`)** - Drag & drop a PDF/EPUB file or paste text/images to read and translate alongside the document.
-4. **Extension (`apps/extension`)** - Select text on any webpage to translate or trigger page-level translation using the shared core AI logic.
-5. **Customize** - Adjust translation style (Personas) and target language securely.
+## Usage
 
-## 🏗 Architecture
+1. Choose an interface language on the home screen; configure the model and translation target in **Settings**.
+2. Paste text, upload images, or open a PDF/EPUB. In a document, click **Translate** to translate a selection or the current page/view.
+3. Use **Locate source** to check the original and **Return to reading** to resume. **Export** copies or downloads completed translations as Markdown.
+4. Configure the extension separately in its popup. Toggle webpage translation there, or use `Alt+T` (`Option+T` on Mac) on general webpages and GitHub.
 
-ReadAcross has evolved into a Monorepo out of a need for cross-platform expansion:
+Document reading records are stored locally. Pasted text and image sessions are temporary; export useful translations before leaving. Translation input is sent to the selected provider or proxy.
 
-- **`packages/core`**: The brain of the operation. Contains shared Types, the `OpenAI` client abstractions, Prompt building logic, and Persona management.
-- **`apps/web`**: The original heavy-duty Single Page Application for reading uploaded documents (PDFs, EPUBs, OCR).
-  - **`functions/`**: Cloudflare Pages Serverless Functions that act as a secure, auto-authenticating proxy to a private Ollama Tunnel.
-- **`apps/extension`**: The Plasmo-based browser extension leveraging `@readacross/core` to inject translation capabilities directly into the user's live browsing session.
+## Build & checks
 
-## ☁️ Deployment (Cloudflare Pages)
-
-The Web App is built to be deployed on **Cloudflare Pages**. The built-in proxy automatically secures your private local LLM instance via Cloudflare Access.
-
-To enable the Hosted proxy, configure the following Environment Variables in your Cloudflare Pages dashboard:
-
-- `OLLAMA_PRIVATE_BASE_URL` - Your Cloudflare Tunnel URL pointing to your local Ollama instance (e.g., `https://llm.yourdomain.com`).
-- `OLLAMA_MODEL` - Default model to use if none is provided (e.g., `qwen3.5:9b`).
-- `CF_ACCESS_CLIENT_ID` - Service Token ID to bypass Cloudflare Access (Encrypt as Secret).
-- `CF_ACCESS_CLIENT_SECRET` - Service Token Secret to bypass Cloudflare Access (Encrypt as Secret).
-
-## 🛠 Tech Stack
-
-- **Monorepo Handling**: pnpm workspaces
-- **Frontend Frameworks**: React 18/19, Vite, Plasmo (Extension)
-- **Styling**: Tailwind CSS
-- **State Management**: Zustand
-- **PDF Rendering**: react-pdf
-- **EPUB Rendering**: react-reader (epubjs)
-- **OCR**: Tesseract.js
-- **AI**: OpenAI SDK
-
-## 📁 Project Structure
-
-```text
-readacross/
-├── apps/
-│   ├── web/               # The standalone reading web application
-│   │   ├── public/        # Static assets for web
-│   │   └── src/           # React components, stores, etc.
-│   └── extension/         # The browser extension
-│       ├── src/           # Extension source code
-│       │   ├── background.ts  # Service worker handling API logic
-│       │   ├── content.ts     # Injected DOM scripts
-│       │   ├── options.tsx    # Full page settings UI
-│       │   └── popup.tsx      # Extension popup UI
-├── packages/
-│   └── core/              # Shared translation intelligence and types
-│       └── src/ai/        # Prompts and LLM client handlers
-├── video/                 # Remotion video project (not in git)
-├── pnpm-workspace.yaml    # pnpm workspace config
-└── package.json           # Root workspace config
+```bash
+pnpm --filter @readacross/web build
+pnpm --filter @readacross/extension build
+node --test apps/web/tests/reading.test.cjs apps/web/tests/language.test.cjs apps/extension/tests/youtube.test.cjs
 ```
 
-## 🤝 Contributing
+Build outputs: `apps/web/dist` and `apps/extension/build/chrome-mv3-prod`. See [Web reading checks](apps/web/tests/README.md) for browser verification.
 
-Contributions are welcome! Please feel free to submit a Pull Request following the workspace boundaries.
+## Project layout
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [DeepSeek](https://platform.deepseek.com/) / [OpenAI](https://platform.openai.com/) for LLM translation API
-- [Plasmo](https://docs.plasmo.com/) for a stellar extension framework
-- [react-pdf](https://github.com/wojtekmaj/react-pdf) / [react-reader](https://github.com/gerhardsletten/react-reader) for document support
-- [Tesseract.js](https://tesseract.projectnaptha.com/) for OCR capabilities
-
----
-
-<p align="center">
-  Made with ❤️ for readers everywhere
-</p>
+- `apps/web` — React document reader and Cloudflare Pages API proxies.
+- `apps/extension` — Plasmo browser extension.
+- `packages/core` — Shared translation clients, prompts, and Markdown serialization.
+- `functions` — Cloudflare Pages API entrypoints for repository-root deployment.
