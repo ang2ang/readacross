@@ -1,5 +1,7 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useState } from 'react';
 import { ReadingStorageSettings } from './ReadingStorageSettings';
+import { LANGUAGES } from '../../i18n/languages';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { type PromptStyle, type Provider, type CustomPrompt } from '@readacross/core';
 import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer, Plus, Trash2, Edit2, Check, BookOpen } from 'lucide-react';
@@ -24,7 +26,7 @@ interface LocalSettings {
 // Example prompts for user reference
 const EXAMPLE_PROMPTS = [
     {
-        name: '学术翻译',
+        name: 'Academic translation',
         prompt: `您是一位专业的学术翻译专家。请将以下内容翻译成目标语言，确保：
 1. 保持学术术语的准确性和专业性
 2. 使用正式的学术语言风格
@@ -32,7 +34,7 @@ const EXAMPLE_PROMPTS = [
 4. 对专业术语可在首次出现时附加英文原文`
     },
     {
-        name: '文学翻译',
+        name: 'Literary translation',
         prompt: `您是一位富有文采的文学翻译家。请将以下内容翻译成目标语言，注重：
 1. 保持原作的文学韵味和修辞风格
 2. 注重遣词造句的优美流畅
@@ -40,7 +42,7 @@ const EXAMPLE_PROMPTS = [
 4. 保留原文的情感色彩和意境`
     },
     {
-        name: '技术文档',
+        name: 'Technical documentation',
         prompt: `您是一位技术文档翻译专家。请将以下内容翻译成目标语言，要求：
 1. 保持技术术语的一致性和准确性
 2. 使用清晰简洁的说明性语言
@@ -48,7 +50,7 @@ const EXAMPLE_PROMPTS = [
 4. 确保操作步骤和指令的明确性`
     },
     {
-        name: '通俗易懂',
+        name: 'Plain language',
         prompt: `您是一位善于深入浅出的翻译专家。请将以下内容翻译成通俗易懂的目标语言，要求：
 1. 将复杂概念用简单词汇解释
 2. 使用日常生活中的例子来类比
@@ -60,6 +62,7 @@ const EXAMPLE_PROMPTS = [
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => isOpen ? <SettingsDialog onClose={onClose} /> : null;
 
 const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose }) => {
+    const { t } = useI18n();
     const settings = useSettingsStore();
 
     // Local state for draft settings (only saved on Done)
@@ -154,7 +157,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
     const handleAddPrompt = () => {
         const newPrompt: CustomPrompt = {
             id: `prompt_draft_${crypto.randomUUID()}`,
-            name: `Custom ${draft.customPrompts.length + 1}`,
+            name: t('Custom {number}', { number: draft.customPrompts.length + 1 }),
             prompt: '',
         };
         setDraft(d => ({
@@ -205,20 +208,20 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
 
     const handleApplyExample = (example: typeof EXAMPLE_PROMPTS[0]) => {
         if (editingPromptId) {
-            setEditingName(example.name);
+            setEditingName(t(example.name));
             setEditingContent(example.prompt);
             // Also immediately update the draft
             setDraft(d => ({
                 ...d,
                 customPrompts: d.customPrompts.map(p =>
-                    p.id === editingPromptId ? { ...p, name: example.name, prompt: example.prompt } : p
+                    p.id === editingPromptId ? { ...p, name: t(example.name), prompt: example.prompt } : p
                 ),
             }));
         } else {
             // Create a new prompt with the example
             const newPrompt: CustomPrompt = {
                 id: `prompt_draft_${crypto.randomUUID()}`,
-                name: example.name,
+                name: t(example.name),
                 prompt: example.prompt,
             };
             setDraft(d => ({
@@ -240,7 +243,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div role="dialog" aria-modal="true" aria-label="Translation settings" data-reader-modal className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            <div role="dialog" aria-modal="true" aria-label={t("Translation settings")} data-reader-modal className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 onKeyDown={event => {
                     if (event.key === 'Escape') { event.stopPropagation(); handleCancel(); return; }
                     if (event.key !== 'Tab') return;
@@ -254,9 +257,9 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                 <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                     <div className="flex items-center gap-2 font-semibold text-slate-800">
                         <Settings className="w-5 h-5 text-slate-600" />
-                        Translation Settings
+                        {t("Translation Settings")}
                     </div>
-                    <button autoFocus aria-label="Close settings" onClick={handleCancel} className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+                    <button autoFocus aria-label={t("Close settings")} onClick={handleCancel} className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -265,7 +268,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     <ReadingStorageSettings />
                     <div className="space-y-4">
-                        <label className="block text-sm font-medium text-slate-700">Provider</label>
+                        <label className="block text-sm font-medium text-slate-700">{t("Provider")}</label>
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 aria-pressed={draft.provider === 'deepseek'}
@@ -293,17 +296,17 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                 className={`min-h-10 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${draft.provider === 'local' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}
                                 onClick={() => handleProviderChange('local')}
                             >
-                                Local LLM
+                                {t("Local LLM")}
                             </button>
                         </div>
                         {draft.provider === 'local' && (
                             <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
-                                Connect to your own local model server, for example Ollama at <code>http://192.168.1.20:11434</code>. The app will automatically use the OpenAI-compatible <code>/v1</code> endpoint.
+                                {t("Connect to your own local model server, for example Ollama at")} <code>http://192.168.1.20:11434</code>{t(". The app will automatically use the OpenAI-compatible")} <code>/v1</code> {t("endpoint.")}
                             </p>
                         )}
                         {draft.provider === 'ollama' && (
                             <p className="text-xs text-violet-700 bg-violet-50 px-3 py-2 rounded-lg border border-violet-100">
-                                Uses the <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline">Ollama Cloud API</a> directly. Create an API key at <a href="https://ollama.com/settings/keys" target="_blank" rel="noopener noreferrer" className="underline">ollama.com/settings/keys</a>. Free tier available.
+                                {t("Uses the")} <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline">{t("Ollama Cloud API")}</a> {t("directly. Create an API key at")} <a href="https://ollama.com/settings/keys" target="_blank" rel="noopener noreferrer" className="underline">ollama.com/settings/keys</a>{t(". Free tier available.")}
                             </p>
                         )}
                     </div>
@@ -313,7 +316,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                         <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                 <Key className="w-4 h-4 text-slate-400" />
-                                API Key
+                                {t("API Key")}
                             </label>
                             <input
                                 type="password"
@@ -322,7 +325,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                 onChange={(e) => setDraft(d => ({ ...d, apiKey: e.target.value }))}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
-                            <p className="text-xs text-slate-500">Stored locally in your browser.</p>
+                            <p className="text-xs text-slate-500">{t("Stored locally in your browser.")}</p>
                         </div>
                     )}
 
@@ -330,7 +333,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                     <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                 <Server className="w-4 h-4 text-slate-400" />
-                                Base URL
+                                {t("Base URL")}
                             </label>
                             <input
                                 type="text"
@@ -343,7 +346,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                     <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                             <BookOpen className="w-4 h-4 text-slate-400" />
-                            Model
+                            {t("Model")}
                         </label>
                         <input
                             type="text"
@@ -357,7 +360,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                     <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                             <Thermometer className="w-4 h-4 text-slate-400" />
-                            Temperature
+                            {t("Temperature")}
                             <span className="ml-auto text-blue-600 font-semibold">{draft.temperature.toFixed(1)}</span>
                         </label>
                         <input
@@ -369,35 +372,31 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                             onChange={(e) => setDraft(d => ({ ...d, temperature: parseFloat(e.target.value) }))}
                             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
                         />
-                        <p className="text-xs text-slate-500">Lower = more deterministic, Higher = more creative</p>
+                        <p className="text-xs text-slate-500">{t("Lower = more deterministic, Higher = more creative")}</p>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <label htmlFor="settings-target-language" className="flex items-center gap-2 text-sm font-medium text-slate-700">
                             <Languages className="w-4 h-4 text-slate-400" />
-                            Target Language
+                            {t("Target Language")}
                         </label>
                         <select
+                            id="settings-target-language"
                             value={draft.targetLanguage}
                             onChange={(e) => setDraft(d => ({ ...d, targetLanguage: e.target.value }))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-0 focus:border-slate-500 bg-white"
                         >
-                            <option value="简体中文">简体中文</option>
-                            <option value="English">English</option>
-                            <option value="日本語">日本語</option>
-                            <option value="Français">Français</option>
-                            <option value="Deutsch">Deutsch</option>
-                            <option value="Português">Português</option>
-                            <option value="繁體中文">繁體中文</option>
+                            {LANGUAGES.map(option => <option key={option.code} value={option.target} lang={option.code}>{option.name}</option>)}
                         </select>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        <label htmlFor="settings-translation-style" className="flex items-center gap-2 text-sm font-medium text-slate-700">
                             <MessageSquare className="w-4 h-4 text-slate-400" />
-                            Translation Style
+                            {t("Translation Style")}
                         </label>
                         <select
+                            id="settings-translation-style"
                             value={draft.promptStyle === 'Custom' && draft.selectedCustomPromptId
                                 ? `custom:${draft.selectedCustomPromptId}`
                                 : draft.promptStyle}
@@ -412,12 +411,12 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                             }}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                         >
-                            <option value="General">General (Balanced)</option>
-                            <option value="Academic">Academic (Formal)</option>
-                            <option value="Philosophical">Philosophical (Nuanced)</option>
-                            <option value="Create">Creative (Literary)</option>
+                            <option value="General">{t("General (Balanced)")}</option>
+                            <option value="Academic">{t("Academic (Formal)")}</option>
+                            <option value="Philosophical">{t("Philosophical (Nuanced)")}</option>
+                            <option value="Create">{t("Creative (Literary)")}</option>
                             {draft.customPrompts.length > 0 && (
-                                <optgroup label="My Custom Prompts">
+                                <optgroup label={t("My Custom Prompts")}>
                                     {draft.customPrompts.map(p => (
                                         <option key={p.id} value={`custom:${p.id}`}>
                                             {p.name}
@@ -425,7 +424,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                     ))}
                                 </optgroup>
                             )}
-                            <option value="Custom">+ Manage Custom Prompts...</option>
+                            <option value="Custom">{t("+ Manage Custom Prompts...")}</option>
                         </select>
                     </div>
 
@@ -433,13 +432,13 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                         <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                             {/* Custom Prompts List */}
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-slate-600">My Prompts</span>
+                                <span className="text-sm font-medium text-slate-600">{t("My Prompts")}</span>
                                 <button
                                     onClick={handleAddPrompt}
                                     className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
                                     <Plus className="w-3.5 h-3.5" />
-                                    New Prompt
+                                    {t("New Prompt")}
                                 </button>
                             </div>
 
@@ -472,7 +471,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                 </div>
                             ) : (
                                 <div className="text-center py-4 text-slate-400 text-sm bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                    No custom prompts yet. Click "New Prompt" or select an example below.
+                                    {t("No custom prompts yet. Click \"New Prompt\" or select an example below.")}
                                 </div>
                             )}
 
@@ -485,7 +484,7 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                             type="text"
                                             value={editingName}
                                             onChange={(e) => updateEditingPrompt(e.target.value, editingContent)}
-                                            placeholder="Prompt name..."
+                                            placeholder={t("Prompt name...")}
                                             className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                         />
                                         <button
@@ -496,17 +495,13 @@ const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose
                                             className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
                                         >
                                             <Check className="w-3 h-3" />
-                                            Save
+                                            {t("Save")}
                                         </button>
                                     </div>
                                     <textarea
                                         value={editingContent}
                                         onChange={(e) => updateEditingPrompt(editingName, e.target.value)}
-                                        placeholder="Enter your custom system prompt here...
-
-Example: 您是一位专业的翻译专家，请...
-
-Tip: Describe the translation style, tone, and any special requirements."
+                                        placeholder={t("Enter your custom system prompt here...\n\nExample: 您是一位专业的翻译专家，请...\n\nTip: Describe the translation style, tone, and any special requirements.")}
                                         className="w-full h-32 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm resize-none"
                                     />
                                 </div>
@@ -514,7 +509,7 @@ Tip: Describe the translation style, tone, and any special requirements."
 
                             {/* Example Prompts */}
                             <div className="pt-2 border-t border-slate-100">
-                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Prompt Examples</span>
+                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t("Prompt Examples")}</span>
                                 <div className="mt-2 grid grid-cols-2 gap-2">
                                     {EXAMPLE_PROMPTS.map((example, idx) => (
                                         <button
@@ -522,7 +517,7 @@ Tip: Describe the translation style, tone, and any special requirements."
                                             onClick={() => handleApplyExample(example)}
                                             className="px-3 py-2 text-left text-xs border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors"
                                         >
-                                            <span className="font-medium text-slate-700 block">{example.name}</span>
+                                            <span className="font-medium text-slate-700 block">{t(example.name)}</span>
                                             <span className="text-slate-400 truncate block">{example.prompt.slice(0, 30)}...</span>
                                         </button>
                                     ))}
@@ -538,13 +533,13 @@ Tip: Describe the translation style, tone, and any special requirements."
                         onClick={handleCancel}
                         className="px-4 py-2 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
                     >
-                        Cancel
+                        {t("Cancel")}
                     </button>
                     <button
                         onClick={handleSave}
                         className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
                     >
-                        Done
+                        {t("Done")}
                     </button>
                 </div>
             </div>

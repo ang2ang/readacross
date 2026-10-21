@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useCallback, useState } from 'react';
 import { Upload, FileType, AlertCircle, Settings } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
@@ -6,10 +7,14 @@ import { TextInputPanel } from './TextInputPanel';
 import { ImageInputPanel } from './ImageInputPanel';
 import { SettingsModal } from '../settings/SettingsModal';
 import { RecentReading } from './RecentReading';
+import { LanguageSelector } from '../common/LanguageSelector';
+import { useSettingsStore } from '../../store/useSettingsStore';
 
 type InputMode = 'file' | 'text' | 'image';
 
 export const FileUploader: React.FC = () => {
+    const { t, language } = useI18n();
+    const setInterfaceLanguage = useSettingsStore(state => state.setInterfaceLanguage);
     const setFile = useFileStore((state) => state.setFile);
     const [isDragging, setIsDragging] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -58,19 +63,22 @@ export const FileUploader: React.FC = () => {
     };
 
     return (
-        <div className="h-screen overflow-auto flex flex-col items-center bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-8 relative">
-            {/* Settings Button - Top Right */}
-            <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="absolute top-4 right-4 p-2.5 rounded-lg bg-white/80 backdrop-blur-sm border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white hover:border-slate-300 transition-all shadow-sm"
-                title="Settings"
-            >
-                <Settings className="w-5 h-5" />
-            </button>
+        <div className="h-screen overflow-auto flex flex-col items-center bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4 sm:px-8 relative">
+            {/* Language and settings - Top Right */}
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+                <LanguageSelector compact language={language} onChange={setInterfaceLanguage} />
+                <button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="p-2.5 rounded-lg bg-white/80 backdrop-blur-sm border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white hover:border-slate-300 transition-all shadow-sm"
+                    title={t("Settings")}
+                >
+                    <Settings className="w-5 h-5" />
+                </button>
+            </div>
 
-            <div className="text-center mb-8">
+            <div className="text-center mt-8 mb-8">
                 <h1 className="text-3xl font-bold text-slate-800 mb-2">ReadAcross</h1>
-                <p className="text-slate-500">Upload a file, paste text, or paste an image to translate</p>
+                <p className="text-slate-500">{t("Upload a file, paste text, or paste an image to translate")}</p>
             </div>
 
             <InputModeSelector activeMode={activeMode} onModeChange={setActiveMode} />
@@ -94,11 +102,11 @@ export const FileUploader: React.FC = () => {
                         </div>
 
                         <h3 className="text-xl font-semibold text-slate-800 mb-2">
-                            {isDragging ? 'Drop your file here' : 'Upload your book'}
+                            {isDragging ? t("Drop your file here") : t("Upload your book")}
                         </h3>
 
                         <p className="text-slate-500 mb-8 max-w-sm">
-                            Drag and drop your PDF or EPUB file here, or click to browse from your computer.
+                            {t("Drag and drop your PDF or EPUB file here, or click to browse from your computer.")}
                         </p>
 
                         <label className="relative">
@@ -109,14 +117,14 @@ export const FileUploader: React.FC = () => {
                                 onChange={handleChange}
                             />
                             <span className="px-6 py-3 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 transition-colors cursor-pointer shadow-lg shadow-slate-200">
-                                Select File
+                                {t("Select File")}
                             </span>
                         </label>
 
                         {error && (
                             <div className="absolute bottom-4 flex items-center gap-2 text-red-500 text-sm font-medium animate-in fade-in slide-in-from-bottom-2">
                                 <AlertCircle className="w-4 h-4" />
-                                {error}
+                                {t(error)}
                             </div>
                         )}
                     </div>

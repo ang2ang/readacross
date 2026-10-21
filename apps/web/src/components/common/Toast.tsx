@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useEffect, useState } from 'react';
 import { X, Undo2 } from 'lucide-react';
 
@@ -9,6 +10,7 @@ interface ToastProps {
 }
 
 export const Toast: React.FC<ToastProps> = ({ message, onUndo, onClose, duration = 5000 }) => {
+    const { t } = useI18n();
     const [isVisible, setIsVisible] = useState(true);
 
     useEffect(() => {
@@ -25,7 +27,7 @@ export const Toast: React.FC<ToastProps> = ({ message, onUndo, onClose, duration
             className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 bg-slate-800 text-white rounded-lg shadow-lg transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
                 }`}
         >
-            <span className="text-sm">{message}</span>
+            <span className="text-sm">{t(message)}</span>
             {onUndo && (
                 <button
                     onClick={() => {
@@ -35,10 +37,11 @@ export const Toast: React.FC<ToastProps> = ({ message, onUndo, onClose, duration
                     className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-white/20 hover:bg-white/30 rounded transition-colors"
                 >
                     <Undo2 className="w-3.5 h-3.5" />
-                    Undo
+                    {t("Undo")}
                 </button>
             )}
             <button
+                aria-label={t('Close')}
                 onClick={onClose}
                 className="p-1 hover:bg-white/20 rounded transition-colors"
             >

@@ -7,6 +7,8 @@ import {createRoot} from 'react-dom/client';
 import {ReaderLayout} from '../src/components/reader/ReaderLayout.tsx';
 import {useFileStore} from '../src/store/useFileStore.ts';
 import {useReadingStore} from '../src/store/useReadingStore.ts';
+import {useSettingsStore} from '../src/store/useSettingsStore.ts';
+import {translate} from '../src/i18n/messages.ts';
 import '../src/index.css';
 
 createRoot(document.querySelector('#root')).render(React.createElement(ReaderLayout));
@@ -16,7 +18,8 @@ const waitFor=async condition=>{
  while(Date.now()<end){if(condition())return;await new Promise(resolve=>setTimeout(resolve,25))}
  throw Error('Timed out waiting for linked page');
 };
-const page=()=>Number(document.querySelector('input[aria-label="Page number"]')?.value);
+const t=text=>translate(useSettingsStore.getState().interfaceLanguage,text);
+const page=()=>Number(document.querySelector(`input[aria-label="${t('Page number')}"]`)?.value);
 const link=name=>document.querySelector(`.annotationLayer a[title="${name}"]`);
 const pass=message=>{results.textContent+=`PASS ${message}\n`};
 const follow=async(name,target,heading)=>{
@@ -42,7 +45,7 @@ document.querySelector('#run').onclick=async()=>{
   if(!document.querySelector('.annotationLayer a[href="https://example.com/"]'))throw Error('External URL was intercepted');
   pass('external URL is retained without opening it');
   await waitFor(()=>link('Broken destination'));link('Broken destination').click();
-  await waitFor(()=>document.querySelector('#reader-content [role="status"]')?.textContent.includes('destination is missing'));
+  await waitFor(()=>document.querySelector('#reader-content [role="status"]')?.textContent.includes(t('This link’s destination is missing from the PDF.')));
   if(page()!==1)throw Error('Broken destination moved to another page');
   pass('unresolved destination shows feedback without changing the page');
   results.textContent+='ALL PDF LINK CHECKS PASSED';

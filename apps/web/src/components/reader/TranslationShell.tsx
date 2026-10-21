@@ -1,8 +1,10 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { clampPanelWidth } from '../../reading/policy';
 
 export function TranslationShell({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+    const { t } = useI18n();
     const [available, setAvailable] = useState(() => window.innerWidth);
     const [preferred, setPreferred] = useState(() => {
         try { return Number(localStorage.getItem('readacross-panel-width')) || 384; } catch { return 384; }
@@ -28,7 +30,7 @@ export function TranslationShell({ open, onClose, children }: { open: boolean; o
     useEffect(() => {
         if (!open || !drawer) return;
         const previous = document.activeElement as HTMLElement | null;
-        const frame = requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>('[aria-label="Close sidebar"]')?.focus());
+        const frame = requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>('[data-close-translation]')?.focus());
         const trap = (event: KeyboardEvent) => {
             if (event.key !== 'Tab' || !panel.current) return;
             if (document.querySelector('dialog[open], [data-reader-modal]')) return;
@@ -59,10 +61,10 @@ export function TranslationShell({ open, onClose, children }: { open: boolean; o
         return () => { document.removeEventListener('keydown', keydown); document.removeEventListener('pointerdown', outside); };
     }, [open, menu, drawer, onClose]);
     return <>
-        {open && drawer && <button tabIndex={-1} aria-label="Close translation overlay" onClick={onClose} className="fixed inset-0 z-30 bg-slate-900/20" />}
-        <aside ref={panel} role={drawer ? 'dialog' : undefined} aria-modal={drawer || undefined} aria-label="Translation panel" style={{ display: open ? 'flex' : 'none', width: drawer ? Math.min(384, available) : width }}
+        {open && drawer && <button tabIndex={-1} aria-label={t("Close translation overlay")} onClick={onClose} className="fixed inset-0 z-30 bg-slate-900/20" />}
+        <aside ref={panel} role={drawer ? 'dialog' : undefined} aria-modal={drawer || undefined} aria-label={t("Translation panel")} style={{ display: open ? 'flex' : 'none', width: drawer ? Math.min(384, available) : width }}
             className={`${drawer ? 'fixed right-0 top-14 bottom-0 z-40' : 'relative h-full shrink-0'} min-w-0 bg-white border-l border-slate-200 shadow-lg`}>
-            <button ref={handle} aria-label="Adjust translation width" aria-haspopup="menu" aria-expanded={menu} title="Drag to resize; double-click to reset"
+            <button ref={handle} aria-label={t("Adjust translation width")} aria-haspopup="menu" aria-expanded={menu} title={t("Drag to resize; double-click to reset")}
                 className={`${drawer ? 'hidden' : ''} absolute -left-2 top-0 bottom-0 w-4 z-20 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-blue-500 group`}
                 onPointerDown={event => {
                     if (event.button !== 0) return;
@@ -84,9 +86,9 @@ export function TranslationShell({ open, onClose, children }: { open: boolean; o
                         event.preventDefault(); event.stopPropagation(); change(width + (event.key === 'ArrowLeft' ? 32 : -32));
                     }
                 }}><span className="absolute left-1.5 top-1/2 h-10 w-1 rounded-full bg-slate-300 group-hover:bg-blue-400" /></button>
-            {menu && !drawer && <div ref={menuRef} role="menu" aria-label="Panel width" className="absolute left-2 top-2 z-30 bg-white shadow-lg border border-slate-200 rounded-lg p-1 text-xs">
+            {menu && !drawer && <div ref={menuRef} role="menu" aria-label={t("Panel width")} className="absolute left-2 top-2 z-30 bg-white shadow-lg border border-slate-200 rounded-lg p-1 text-xs">
                 {[['Wider', width + 32], ['Narrower', width - 32], ['Reset width', 384]].map(([label, value]) =>
-                    <button role="menuitem" key={label} className="block w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { change(Number(value)); setMenu(false); handle.current?.focus(); }}>{label}</button>)}
+                    <button role="menuitem" key={label} className="block w-full text-left px-3 py-2 hover:bg-slate-50" onClick={() => { change(Number(value)); setMenu(false); handle.current?.focus(); }}>{t(String(label))}</button>)}
             </div>}
             {children}
         </aside>

@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Loader2, ArrowRight, AlertCircle, RefreshCw, Images } from 'lucide-react';
 import { createWorker } from 'tesseract.js';
@@ -9,6 +10,7 @@ interface ImageFile {
 }
 
 export const ImageInputPanel: React.FC = () => {
+    const { t } = useI18n();
     const { setImages } = useFileStore();
     const [imageFiles, setImageFiles] = useState<ImageFile[]>([]);
     const [isExtracting, setIsExtracting] = useState(false);
@@ -169,11 +171,11 @@ export const ImageInputPanel: React.FC = () => {
                     </div>
 
                     <h3 className="text-xl font-semibold text-slate-800 mb-2">
-                        {isDragging ? 'Drop your images here' : 'Paste or Upload Images'}
+                        {isDragging ? t("Drop your images here") : t("Paste or Upload Images")}
                     </h3>
 
                     <p className="text-slate-500 mb-6 max-w-sm">
-                        Paste images (⌘+V), drag & drop, or click to browse. <strong>Multiple images supported!</strong>
+                        {t("Paste images (⌘+V), drag & drop, or click to browse.")} <strong>{t("Multiple images supported!")}</strong>
                     </p>
 
                     <input
@@ -189,7 +191,7 @@ export const ImageInputPanel: React.FC = () => {
                         onClick={() => fileInputRef.current?.click()}
                         className="px-6 py-3 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200"
                     >
-                        Select Images
+                        {t("Select Images")}
                     </button>
                 </div>
             ) : (
@@ -199,14 +201,14 @@ export const ImageInputPanel: React.FC = () => {
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
                         <div className="flex items-center gap-2 text-slate-700 font-medium">
                             <Images className="w-4 h-4" />
-                            {imageFiles.length} Image{imageFiles.length > 1 ? 's' : ''} Selected
+                            {t('{count} image(s) selected', { count: imageFiles.length })}
                         </div>
                         <button
                             onClick={handleReset}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                         >
                             <RefreshCw className="w-3.5 h-3.5" />
-                            Clear All
+                            {t("Clear All")}
                         </button>
                     </div>
 
@@ -217,13 +219,14 @@ export const ImageInputPanel: React.FC = () => {
                                 <div key={img.url} className="relative shrink-0 group">
                                     <img
                                         src={img.url}
-                                        alt={`Image ${index + 1}`}
+                                        alt={t('Image {number}', { number: index + 1 })}
                                         className={`h-24 w-auto rounded-lg shadow-sm object-cover ${index === 0 ? 'ring-2 ring-blue-500' : ''}`}
                                     />
                                     {index === 0 && (
-                                        <span className="absolute -top-2 -left-2 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">1st</span>
+                                        <span className="absolute -top-2 -left-2 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">{t("1st")}</span>
                                     )}
                                     <button
+                                        aria-label={t('Remove image')}
                                         onClick={() => removeImage(index)}
                                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
                                     >
@@ -237,7 +240,7 @@ export const ImageInputPanel: React.FC = () => {
                                 className="h-24 w-20 shrink-0 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-slate-400 hover:text-slate-500 transition-colors"
                             >
                                 <span className="text-2xl">+</span>
-                                <span className="text-xs">Add</span>
+                                <span className="text-xs">{t("Add")}</span>
                             </button>
                         </div>
                         <input
@@ -255,7 +258,7 @@ export const ImageInputPanel: React.FC = () => {
                         {isExtracting && (
                             <div className="text-center py-4">
                                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
-                                <p className="text-sm text-slate-600">Extracting text... {extractProgress}%</p>
+                                <p className="text-sm text-slate-600">{t("Extracting text...")} {extractProgress}%</p>
                                 <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2">
                                     <div
                                         className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
@@ -268,7 +271,7 @@ export const ImageInputPanel: React.FC = () => {
                         {extractedText && !isExtracting && (
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-2">Extracted Text (First Image)</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-2">{t("Extracted Text (First Image)")}</label>
                                     <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 leading-relaxed max-h-32 overflow-auto border border-slate-200">
                                         {extractedText}
                                     </div>
@@ -279,7 +282,7 @@ export const ImageInputPanel: React.FC = () => {
                         {error && (
                             <div className="flex items-center gap-2 text-amber-600 text-sm mt-3 bg-amber-50 p-3 rounded-lg">
                                 <AlertCircle className="w-4 h-4" />
-                                {error}
+                                {t(error)}
                             </div>
                         )}
 
@@ -289,7 +292,7 @@ export const ImageInputPanel: React.FC = () => {
                                 onClick={handleSubmit}
                                 className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors"
                             >
-                                {extractedText ? 'Start Translation' : 'View Images'}
+                                {extractedText ? t("Start Translation") : t("View Images")}
                                 <ArrowRight className="w-4 h-4" />
                             </button>
                         )}
@@ -299,7 +302,7 @@ export const ImageInputPanel: React.FC = () => {
 
             {/* Hint */}
             <p className="text-center text-sm text-slate-400 mt-4">
-                Supports PNG, JPG, WEBP, GIF • First image is auto-OCR'd
+                {t("Supports PNG, JPG, WEBP, GIF • First image is auto-OCR'd")}
             </p>
         </div>
     );

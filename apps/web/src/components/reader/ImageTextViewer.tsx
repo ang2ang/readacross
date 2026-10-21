@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Upload } from 'lucide-react';
 import { createWorker } from 'tesseract.js';
@@ -8,6 +9,7 @@ interface ImageTextViewerProps {
 }
 
 export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) => {
+    const { t } = useI18n();
     const { images, currentImageIndex, setCurrentImageIndex, updateImageText, setGetPageText, setPendingAutoTranslate } = useFileStore();
     const [isExtracting, setIsExtracting] = useState(false);
     const [extractProgress, setExtractProgress] = useState(0);
@@ -87,7 +89,7 @@ export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) =>
                         <ChevronLeft className="w-5 h-5" />
                     </button>
                     <span className="text-sm font-medium text-slate-600">
-                        Image {currentImageIndex + 1} of {totalImages}
+                        {t('Image {number} of {total}', { number: currentImageIndex + 1, total: totalImages })}
                     </span>
                     <button
                         onClick={handleNext}
@@ -106,7 +108,7 @@ export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) =>
                     <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 flex items-center justify-center overflow-hidden">
                         <img
                             src={currentImage.url}
-                            alt={`Image ${currentImageIndex + 1}`}
+                            alt={t('Image {number}', { number: currentImageIndex + 1 })}
                             className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
                         />
                     </div>
@@ -115,7 +117,7 @@ export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) =>
                     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
                         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
                             <span className="text-sm font-medium text-slate-600">
-                                {hasText ? 'Extracted Text' : 'Text Not Extracted'}
+                                {hasText ? t("Extracted Text") : t("Text Not Extracted")}
                             </span>
                         </div>
                         <div className="flex-1 overflow-auto p-4" style={fontSizeStyle}>
@@ -126,7 +128,7 @@ export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) =>
                             ) : isExtracting ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center">
                                     <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3" />
-                                    <p className="text-slate-600 mb-2">Extracting text... {extractProgress}%</p>
+                                    <p className="text-slate-600 mb-2">{t("Extracting text...")} {extractProgress}%</p>
                                     <div className="w-48 bg-slate-200 rounded-full h-1.5">
                                         <div
                                             className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
@@ -136,13 +138,13 @@ export const ImageTextViewer: React.FC<ImageTextViewerProps> = ({ fontSize }) =>
                                 </div>
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center text-center">
-                                    <p className="text-slate-500 mb-4">This image hasn't been processed yet.</p>
+                                    <p className="text-slate-500 mb-4">{t("This image hasn't been processed yet.")}</p>
                                     <button
                                         onClick={handleExtractText}
                                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                                     >
                                         <Upload className="w-4 h-4" />
-                                        Extract Text
+                                        {t("Extract Text")}
                                     </button>
                                 </div>
                             )}

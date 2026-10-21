@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDown, Check, ChevronDown, ChevronRight, Copy, Download, Loader2, MapPin, PanelRightClose, Play, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { buildSystemPrompt, translateText } from '@readacross/core';
@@ -7,7 +8,6 @@ import { useFileStore } from '../../store/useFileStore';
 import { useReadingStore } from '../../store/useReadingStore';
 import { compareRecords, digest, normalizeText, translationKey } from '../../reading/policy';
 import { buildReadingMarkdown } from '../../reading/markdown';
-import { locationLabel } from '../../reading/types';
 import type { TranslationRecord, TranslationSettings } from '../../reading/types';
 
 interface TranslationPanelProps {
@@ -20,6 +20,7 @@ interface TranslationPanelProps {
 interface Draft { revision: number; text: string; translation: string; loading: boolean }
 
 export function TranslationPanel({ onClose, isOpen, autoTranslate, onAutoTranslateConsumed, getLatestSelection }: TranslationPanelProps) {
+    const { t, locationLabel } = useI18n();
     const settings = useSettingsStore();
     const { file, inputMode, pastedText, images, selection, getPageText, newContentStart, clearNewContentStart } = useFileStore();
     const { revision, session, document: savedDocument, entries: savedEntries, ready, status, error: storageError, bridge } = useReadingStore();
@@ -187,29 +188,29 @@ export function TranslationPanel({ onClose, isOpen, autoTranslate, onAutoTransla
     };
     return <div className="flex flex-col h-full w-full min-w-0">
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-blue-50/60">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Sparkles className="w-4 h-4 text-blue-500" />AI Translation</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Sparkles className="w-4 h-4 text-blue-500" />{t("AI Translation")}</div>
             <div className="flex items-center gap-1">
-                {!file && entries.length > 0 && <button aria-label="Clear temporary translations" title="Clear temporary translations" className="p-2 text-slate-400 hover:text-red-500" onClick={() => { setTemporary({ session, entries: [] }); setDraft(null); }}><Trash2 className="w-4 h-4" /></button>}
+                {!file && entries.length > 0 && <button aria-label={t("Clear temporary translations")} title={t("Clear temporary translations")} className="p-2 text-slate-400 hover:text-red-500" onClick={() => { setTemporary({ session, entries: [] }); setDraft(null); }}><Trash2 className="w-4 h-4" /></button>}
                 <div className="relative" ref={exportArea}>
                     <button ref={exportButton} disabled={!entries.length} aria-haspopup="menu" aria-expanded={exportOpen}
                         className="flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50" onClick={() => setExportOpen(value => !value)}
-                        onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setExportOpen(true); requestAnimationFrame(() => exportArea.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()); } }}>Export<ChevronDown className="w-3 h-3" /></button>
-                    {exportOpen && <div role="menu" aria-label="Export completed translations" className="absolute right-0 top-full mt-1 z-30 w-48 p-1 bg-white rounded-lg border border-slate-200 shadow-lg"
+                        onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setExportOpen(true); requestAnimationFrame(() => exportArea.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()); } }}>{t("Export")}<ChevronDown className="w-3 h-3" /></button>
+                    {exportOpen && <div role="menu" aria-label={t("Export completed translations")} className="absolute right-0 top-full mt-1 z-30 w-48 p-1 bg-white rounded-lg border border-slate-200 shadow-lg"
                         onKeyDown={event => {
                             if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
                             event.preventDefault(); const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
                             const index = items.indexOf(document.activeElement as HTMLButtonElement);
                             items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
                         }}>
-                        {file && <p className="px-2 py-1 text-[11px] text-slate-400">Completed translations in this file</p>}
-                        <button role="menuitem" onClick={() => void exportMarkdown(false)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Copy className="w-3.5 h-3.5" />Copy Markdown</button>
-                        <button role="menuitem" onClick={() => void exportMarkdown(true)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Download className="w-3.5 h-3.5" />Download .md</button>
+                        {file && <p className="px-2 py-1 text-[11px] text-slate-400">{t("Completed translations in this file")}</p>}
+                        <button role="menuitem" onClick={() => void exportMarkdown(false)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Copy className="w-3.5 h-3.5" />{t("Copy Markdown")}</button>
+                        <button role="menuitem" onClick={() => void exportMarkdown(true)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Download className="w-3.5 h-3.5" />{t("Download .md")}</button>
                     </div>}
                 </div>
-                <button onClick={onClose} aria-label="Close sidebar" title="Close sidebar" className="p-2 text-slate-400 hover:text-slate-600"><PanelRightClose className="w-4 h-4" /></button>
+                <button data-close-translation onClick={onClose} aria-label={t("Close sidebar")} title={t("Close sidebar")} className="p-2 text-slate-400 hover:text-slate-600"><PanelRightClose className="w-4 h-4" /></button>
             </div>
         </div>
-        {file && <div className="px-4 py-2 text-xs text-slate-400" role="status">{status === 'loading' ? 'Saving / restoring…' : status === 'saved' ? 'Saved on this device' : status === 'translations-only' ? 'Translations saved · original file not retained' : 'Not saved on this device'}{storageError && <p className="mt-1 text-amber-700">{storageError}</p>}</div>}
+        {file && <div className="px-4 py-2 text-xs text-slate-400" role="status">{status === 'loading' ? t("Saving / restoring…") : status === 'saved' ? t("Saved on this device") : status === 'translations-only' ? t("Translations saved · original file not retained") : t("Not saved on this device")}{storageError && <p className="mt-1 text-amber-700">{t(storageError)}</p>}</div>}
         <div ref={scroll} className="flex-1 min-h-0 overflow-auto p-4 space-y-4 relative" onScroll={event => {
             const element = event.currentTarget;
             following.current = element.scrollHeight - element.clientHeight - element.scrollTop < 80;
@@ -227,39 +228,39 @@ export function TranslationPanel({ onClose, isOpen, autoTranslate, onAutoTransla
                 <div className="p-4 rounded-lg bg-blue-50/60 border border-blue-100 text-slate-800">
                     <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{entry.translation}</p>
                     <div className="flex justify-end gap-2 mt-2 text-xs text-slate-400">
-                        <button aria-label="Copy translation" title="Copy translation" className="p-1.5 hover:text-blue-600 focus-visible:text-blue-600" onClick={async () => {
+                        <button aria-label={t("Copy translation")} title={t("Copy translation")} className="p-1.5 hover:text-blue-600 focus-visible:text-blue-600" onClick={async () => {
                             try { await navigator.clipboard.writeText(entry.translation); setCopied(entry.id); setTimeout(() => setCopied(''), 2000); }
                             catch { setFailure({ revision, message: 'Could not copy the translation.' }); }
                         }}>{copied === entry.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}</button>
                         {entry.locator && <button className="flex gap-1 items-center hover:text-blue-600" onClick={() => {
                             void useReadingStore.getState().locate(entry.locator!);
                             if (window.innerWidth < 1024) onClose();
-                        }}><MapPin className="w-3 h-3" />Locate source</button>}
+                        }}><MapPin className="w-3 h-3" />{t("Locate source")}</button>}
                     </div>
                 </div>
             </div>)}
             {activeDraft && <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm leading-relaxed text-slate-800 whitespace-pre-wrap break-words">
-                {activeDraft.translation || <span className="flex gap-2 items-center text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Translating…</span>}
-                {!activeDraft.loading && <p className="mt-2 text-xs text-amber-700">Incomplete · not saved or exported</p>}
+                {activeDraft.translation || <span className="flex gap-2 items-center text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />{t("Translating…")}</span>}
+                {!activeDraft.loading && <p className="mt-2 text-xs text-amber-700">{t("Incomplete · not saved or exported")}</p>}
             </div>}
-            {error && <div role="alert" className="flex gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3"><X className="w-4 h-4 shrink-0" />{error}</div>}
-            {info && <p role="status" className="text-xs text-emerald-700">{info}</p>}
-            {!entries.length && !activeDraft && !error && <p className="py-12 text-center text-sm text-slate-400">Select text or translate the current page.</p>}
+            {error && <div role="alert" className="flex gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3"><X className="w-4 h-4 shrink-0" />{t(error)}</div>}
+            {info && <p role="status" className="text-xs text-emerald-700">{t(info)}</p>}
+            {!entries.length && !activeDraft && !error && <p className="py-12 text-center text-sm text-slate-400">{t("Select text or translate the current page.")}</p>}
         </div>
-        {newOutput.session === session && newOutput.value && <button onClick={jumpToNew} className="mx-auto mb-2 px-3 py-1.5 text-xs rounded-full border border-blue-100 bg-white text-blue-600 shadow-sm flex items-center gap-1">New translation<ArrowDown className="w-3 h-3" /></button>}
+        {newOutput.session === session && newOutput.value && <button onClick={jumpToNew} className="mx-auto mb-2 px-3 py-1.5 text-xs rounded-full border border-blue-100 bg-white text-blue-600 shadow-sm flex items-center gap-1">{t("New translation")}<ArrowDown className="w-3 h-3" /></button>}
         <div className="border-t border-slate-100 bg-slate-50 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
-                <select aria-label="Translation style" className="min-w-0 max-w-[60%] text-xs py-1 px-2 border border-slate-200 rounded bg-white text-slate-600"
+                <select aria-label={t("Translation style")} className="min-w-0 max-w-[60%] text-xs py-1 px-2 border border-slate-200 rounded bg-white text-slate-600"
                     value={settings.promptStyle === 'Custom' && settings.selectedCustomPromptId ? `custom:${settings.selectedCustomPromptId}` : settings.promptStyle}
                     onChange={event => { const value = event.target.value; if (value.startsWith('custom:')) { settings.setPromptStyle('Custom'); settings.selectCustomPrompt(value.slice(7)); } else settings.setPromptStyle(value as PromptStyle); }}>
-                    <option value="General">General</option><option value="Academic">Academic</option><option value="Create">Creative</option><option value="Philosophical">Philosophical</option>
+                    <option value="General">{t("General")}</option><option value="Academic">{t("Academic")}</option><option value="Create">{t("Creative")}</option><option value="Philosophical">{t("Philosophical")}</option>
                     {settings.customPrompts.map(prompt => <option key={prompt.id} value={`custom:${prompt.id}`}>{prompt.name}</option>)}
                 </select><span className="text-xs text-slate-400 truncate">{settings.model}</span>
             </div>
-            {loading ? <button onClick={() => request.current?.controller.abort()} className="w-full flex justify-center items-center gap-2 rounded-lg py-2 text-sm text-rose-600 bg-rose-50 border border-rose-100"><Square className="w-3.5 h-3.5" />Stop</button>
+            {loading ? <button onClick={() => request.current?.controller.abort()} className="w-full flex justify-center items-center gap-2 rounded-lg py-2 text-sm text-rose-600 bg-rose-50 border border-rose-100"><Square className="w-3.5 h-3.5" />{t("Stop")}</button>
                 : <div className="flex gap-2">
-                    <button disabled={!hasSelection || !!(file && !ready)} onClick={() => void run('selection')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 bg-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />Selection</button>
-                    <button disabled={file ? !ready || !bridge : !getPageText} onClick={() => void run('page')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg bg-blue-600 text-sm text-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />{file && savedDocument?.type === 'epub' ? 'Current view' : 'Page'}</button>
+                    <button disabled={!hasSelection || !!(file && !ready)} onClick={() => void run('selection')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 bg-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />{t("Selection")}</button>
+                    <button disabled={file ? !ready || !bridge : !getPageText} onClick={() => void run('page')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg bg-blue-600 text-sm text-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />{file && savedDocument?.type === 'epub' ? t("Current view") : t("Page")}</button>
                 </div>}
         </div>
     </div>;

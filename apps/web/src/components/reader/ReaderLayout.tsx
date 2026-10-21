@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Settings, Minus, Plus, Type, ZoomIn, Home, PlusCircle, Undo2 } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
@@ -15,6 +16,7 @@ import { Toast } from '../common/Toast';
 import Tesseract from 'tesseract.js';
 
 export const ReaderLayout: React.FC = () => {
+    const { t } = useI18n();
     const { file, fileType, inputMode, pastedText, images, pendingAutoTranslate, canUndo, setFile, reset, setPendingAutoTranslate, appendText, appendImage, undo, clearUndo } = useFileStore();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isTranslationOpen, setIsTranslationOpen] = useState(false);
@@ -137,15 +139,15 @@ export const ReaderLayout: React.FC = () => {
 
     const getContentLabel = () => {
         if (fileType) return fileType.toUpperCase();
-        if (inputMode === 'text') return 'TEXT';
-        if (inputMode === 'image') return 'IMAGE';
+        if (inputMode === 'text') return t('TEXT');
+        if (inputMode === 'image') return t('IMAGE');
         return '';
     };
 
     const getContentName = () => {
         if (file) return file.name;
-        if (inputMode === 'text') return 'Pasted Text';
-        if (inputMode === 'image') return `${images.length} Image${images.length > 1 ? 's' : ''}`;
+        if (inputMode === 'text') return t('Pasted Text');
+        if (inputMode === 'image') return t('{count} image(s)', { count: images.length });
         return '';
     };
 
@@ -178,10 +180,10 @@ export const ReaderLayout: React.FC = () => {
                             <button
                                 onClick={() => setIsQuickPasteOpen(true)}
                                 className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all bg-green-50 text-green-600 hover:bg-green-100 cursor-pointer"
-                                title="Add more content (Ctrl+V)"
+                                title={t("Add more content (Ctrl+V)")}
                             >
                                 <PlusCircle className="w-4 h-4" />
-                                Add
+                                {t("Add")}
                             </button>
                             <div className="hidden sm:block h-6 w-px bg-slate-200" />
                         </>
@@ -193,7 +195,7 @@ export const ReaderLayout: React.FC = () => {
                             onClick={() => handleFontSizeChange(-10)}
                             disabled={displaySize <= minSize}
                             className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                            title={isPdf ? 'Zoom out' : 'Decrease font size'}
+                            title={isPdf ? t("Zoom out") : t("Decrease font size")}
                         >
                             <Minus className="w-4 h-4" />
                         </button>
@@ -205,7 +207,7 @@ export const ReaderLayout: React.FC = () => {
                             onClick={() => handleFontSizeChange(10)}
                             disabled={displaySize >= maxSize}
                             className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                            title={isPdf ? 'Zoom in' : 'Increase font size'}
+                            title={isPdf ? t("Zoom in") : t("Increase font size")}
                         >
                             <Plus className="w-4 h-4" />
                         </button>
@@ -217,14 +219,14 @@ export const ReaderLayout: React.FC = () => {
                     {/* Translate Button */}
                     <button
                         onClick={handleTranslateSelection}
-                        aria-label="Open translation"
+                        aria-label={t("Open translation")}
                         className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all bg-blue-50 text-blue-600 hover:bg-blue-100 cursor-pointer"
                     >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="m5 8 6 6" /><path d="m4 14 6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" />
                             <path d="m22 22-5-10-5 10" /><path d="M14 18h6" />
                         </svg>
-                        <span className="hidden sm:inline">Translate</span>
+                        <span className="hidden sm:inline">{t("Translate")}</span>
                     </button>
 
                     {/* Divider */}
@@ -234,7 +236,7 @@ export const ReaderLayout: React.FC = () => {
                     <button
                         onClick={() => setIsSettingsOpen(true)}
                         className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors cursor-pointer"
-                        title="Settings"
+                        title={t("Settings")}
                     >
                         <Settings className="w-5 h-5" />
                     </button>
@@ -243,10 +245,10 @@ export const ReaderLayout: React.FC = () => {
                     <button
                         onClick={handleGoHome}
                         className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors font-medium border border-slate-200 cursor-pointer"
-                        title="Back to Home"
+                        title={t("Back to Home")}
                     >
                         <Home className="w-4 h-4" />
-                        <span className="hidden sm:inline">New</span>
+                        <span className="hidden sm:inline">{t("New")}</span>
                     </button>
                 </div>
             </header>
@@ -262,8 +264,8 @@ export const ReaderLayout: React.FC = () => {
                         {inputMode === 'image' && images.length > 0 && <ImageTextViewer fontSize={fontSize} />}
                     </div>
                     {returnLocation && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 max-w-[95%] rounded-lg bg-white shadow-lg border border-blue-100 z-20">
-                        {locationNotice && <p role="status" className="px-3 pt-2 text-xs text-slate-500">{locationNotice}</p>}
-                        <button onClick={() => { void goBack(); }} className="mx-auto flex items-center gap-2 px-3 py-2 text-blue-600 text-sm whitespace-nowrap"><Undo2 className="w-4 h-4" />Return to reading</button>
+                        {locationNotice && <p role="status" className="px-3 pt-2 text-xs text-slate-500">{t(locationNotice)}</p>}
+                        <button onClick={() => { void goBack(); }} className="mx-auto flex items-center gap-2 px-3 py-2 text-blue-600 text-sm whitespace-nowrap"><Undo2 className="w-4 h-4" />{t("Return to reading")}</button>
                     </div>}
                 </div>
 

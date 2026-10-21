@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Type, ImageIcon, Clipboard, Loader2 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
@@ -17,6 +18,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
     onPasteImage,
     currentMode
 }) => {
+    const { t } = useI18n();
     const [text, setText] = useState('');
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -124,20 +126,20 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={resetAndClose}>
             <div
-                role="dialog" aria-modal="true" aria-label="Add more content" data-reader-modal
+                role="dialog" aria-modal="true" aria-label={t("Add more content")} data-reader-modal
                 className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-800">Add More</h3>
+                        <h3 className="font-semibold text-slate-800">{t("Add More")}</h3>
                         <span className="flex items-center gap-1 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
                             {currentMode === 'text' ? <Type className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-                            {currentMode === 'text' ? 'Text' : 'Image'}
+                            {currentMode === 'text' ? t("Text") : t("Image")}
                         </span>
                     </div>
-                    <button onClick={resetAndClose} className="p-1 hover:bg-slate-100 rounded transition-colors">
+                    <button aria-label={t('Close')} onClick={resetAndClose} className="p-1 hover:bg-slate-100 rounded transition-colors">
                         <X className="w-5 h-5 text-slate-500" />
                     </button>
                 </div>
@@ -149,7 +151,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                             <textarea
                                 value={text}
                                 onChange={e => setText(e.target.value)}
-                                placeholder="Paste or type text here..."
+                                placeholder={t("Paste or type text here...")}
                                 className="w-full h-40 p-3 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                                 autoFocus
                             />
@@ -158,16 +160,16 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                                 className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
                             >
                                 <Clipboard className="w-4 h-4" />
-                                Paste from clipboard
+                                {t("Paste from clipboard")}
                             </button>
                         </div>
                     ) : (
                         <div className="space-y-3">
                             {imageUrl ? (
                                 <div className="relative">
-                                    <img src={imageUrl} alt="Preview" className="w-full max-h-48 object-contain rounded-lg border border-slate-200" />
+                                    <img src={imageUrl} alt={t("Preview")} className="w-full max-h-48 object-contain rounded-lg border border-slate-200" />
                                     <button
-                                        onClick={() => setImageUrl(null)}
+                                        aria-label={t('Remove image')} onClick={() => setImageUrl(null)}
                                         className="absolute top-2 right-2 p-1 bg-white/90 hover:bg-white rounded-full shadow"
                                     >
                                         <X className="w-4 h-4 text-slate-600" />
@@ -181,7 +183,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                                     tabIndex={0}
                                 >
                                     <ImageIcon className="w-8 h-8 text-slate-400" />
-                                    <span className="text-sm text-slate-500">Press ⌘V to paste, or click to upload</span>
+                                    <span className="text-sm text-slate-500">{t("Press ⌘V to paste, or click to upload")}</span>
                                 </div>
                             )}
                             <input
@@ -196,7 +198,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                                 className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
                             >
                                 <Clipboard className="w-4 h-4" />
-                                Paste from clipboard
+                                {t("Paste from clipboard")}
                             </button>
                         </div>
                     )}
@@ -208,7 +210,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                         onClick={resetAndClose}
                         className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                     >
-                        Cancel
+                        {t("Cancel")}
                     </button>
                     <button
                         onClick={handleSubmit}
@@ -221,7 +223,7 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
                                 OCR {ocrProgress}%
                             </>
                         ) : (
-                            'Add'
+                            t('Add')
                         )}
                     </button>
                 </div>

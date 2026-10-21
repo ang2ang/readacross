@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { EpubView } from 'react-reader';
 import { EpubCFI } from 'epubjs';
@@ -17,6 +18,7 @@ function resizeAt(rendition: Rendition, width: number, height: number, target?: 
 }
 
 export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
+    const { t } = useI18n();
     const file = useFileStore(state => state.file);
     const ready = useReadingStore(state => state.ready);
     const savedPosition = useReadingStore(state => state.document?.position);
@@ -310,7 +312,7 @@ export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
         return () => cancelAnimationFrame(frame);
     }, [fontSize]);
 
-    if (!bookData || !ready) return <div className="p-10 text-center">Reading file...</div>;
+    if (!bookData || !ready) return <div className="p-10 text-center">{t("Reading file...")}</div>;
 
     const renderToc = (items: TocItem[], depth = 0): React.ReactNode => <ul className={depth ? 'pl-4 space-y-0.5' : 'space-y-0.5'}>
         {items.map((item, index) => <li key={`${item.href}-${index}`}>
@@ -329,10 +331,10 @@ export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
                     onClick={() => setShowToc(!showToc)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer select-none ${showToc ? 'bg-blue-100 text-blue-600' : 'text-slate-700 hover:bg-slate-100'
                         }`}
-                    title="Table of Contents"
+                    title={t("Table of Contents")}
                 >
                     <List className="w-4 h-4" />
-                    TOC
+                    {t("TOC")}
                 </button>
 
                 <div className="h-4 w-px bg-slate-200" />
@@ -341,16 +343,16 @@ export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
                     onClick={handlePrev}
                     className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg transition-colors cursor-pointer select-none"
                 >
-                    <ChevronLeft className="w-4 h-4" /> Previous
+                    <ChevronLeft className="w-4 h-4" /> {t("Previous")}
                 </button>
                 <button
                     onClick={handleNext}
                     className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg transition-colors cursor-pointer select-none"
                 >
-                    Next <ChevronRight className="w-4 h-4" />
+                    {t("Next")} <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
-            {navigationError && <p role="status" className="shrink-0 px-4 py-2 text-xs text-slate-600 border-b border-slate-200">{navigationError}</p>}
+            {navigationError && <p role="status" className="shrink-0 px-4 py-2 text-xs text-slate-600 border-b border-slate-200">{t(navigationError)}</p>}
 
             {/* Main Content Area */}
             <div className="flex-1 relative overflow-hidden flex">
@@ -358,18 +360,18 @@ export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
                 {showToc && (
                     <div className="w-72 bg-white border-r border-slate-200 overflow-y-auto shrink-0 z-10">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 sticky top-0">
-                            <span className="text-sm font-semibold text-slate-700">Table of Contents</span>
+                            <span className="text-sm font-semibold text-slate-700">{t("Table of Contents")}</span>
                             <button
                                 onClick={() => setShowToc(false)}
-                                aria-label="Close table of contents"
+                                aria-label={t("Close table of contents")}
                                 className="p-1 hover:bg-slate-200 rounded transition-colors"
                             >
                                 <X className="w-4 h-4 text-slate-500" />
                             </button>
                         </div>
-                        <nav className="py-2" aria-label="Table of contents">
+                        <nav className="py-2" aria-label={t("Table of contents")}>
                             {toc.length === 0 ? (
-                                <p className="px-4 py-3 text-sm text-slate-400">No table of contents available</p>
+                                <p className="px-4 py-3 text-sm text-slate-400">{t("No table of contents available")}</p>
                             ) : (
                                 renderToc(toc)
                             )}
@@ -386,7 +388,7 @@ export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
                         tocChanged={tocChanged}
                         getRendition={getRendition}
                         handleKeyPress={keydown}
-                        loadingView={<div className="absolute inset-0 flex items-center justify-center text-slate-400">Loading...</div>}
+                        loadingView={<div className="absolute inset-0 flex items-center justify-center text-slate-400">{t("Loading...")}</div>}
                         epubOptions={{
                             flow: 'paginated',
                             manager: 'default',

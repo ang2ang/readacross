@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Provider, PromptStyle, CustomPrompt } from '@readacross/core';
+import { defaultTargetLanguage, isInterfaceLanguage } from '../i18n/languages';
+import type { InterfaceLanguage } from '../i18n/languages';
 
 // ---------------------------------------------------------------------------
 // Default values for each provider
@@ -21,6 +23,7 @@ interface SettingsState {
     promptStyle: PromptStyle;
     customPrompts: CustomPrompt[];
     selectedCustomPromptId: string | null;
+    interfaceLanguage: InterfaceLanguage;
     targetLanguage: string;
     temperature: number;
 
@@ -34,6 +37,7 @@ interface SettingsState {
     setProvider: (provider: Provider) => void;
     setModel: (model: string) => void;
     setPromptStyle: (style: PromptStyle) => void;
+    setInterfaceLanguage: (language: InterfaceLanguage) => void;
     setTargetLanguage: (language: string) => void;
     setTemperature: (temperature: number) => void;
 
@@ -56,7 +60,8 @@ export const useSettingsStore = create<SettingsState>()(
             promptStyle: 'General',
             customPrompts: [],
             selectedCustomPromptId: null,
-            targetLanguage: '简体中文',
+            interfaceLanguage: 'zh-CN',
+            targetLanguage: defaultTargetLanguage('zh-CN'),
             temperature: 1.3,
             keys: {},
             baseUrls: {},
@@ -92,6 +97,10 @@ export const useSettingsStore = create<SettingsState>()(
                 models: { ...state.models, [state.provider]: model }
             })),
             setPromptStyle: (promptStyle) => set({ promptStyle }),
+            setInterfaceLanguage: (interfaceLanguage) => set(state => state.interfaceLanguage === interfaceLanguage ? {} : {
+                interfaceLanguage,
+                targetLanguage: defaultTargetLanguage(interfaceLanguage),
+            }),
             setTargetLanguage: (targetLanguage) => set({ targetLanguage }),
             setTemperature: (temperature) => set({ temperature }),
 
@@ -136,6 +145,17 @@ export const useSettingsStore = create<SettingsState>()(
         }),
         {
             name: 'readacross-settings',
+            merge: (persisted, current) => {
+                const saved = (persisted || {}) as Partial<SettingsState>;
+                const hasLanguage = isInterfaceLanguage(saved.interfaceLanguage);
+                const interfaceLanguage = isInterfaceLanguage(saved.interfaceLanguage) ? saved.interfaceLanguage : 'zh-CN';
+                // Old versions used Chinese as the target by default. Adopt the new
+                // default once, while retaining other previously selected targets.
+                const targetLanguage = typeof saved.targetLanguage === 'string' && saved.targetLanguage &&
+                    (hasLanguage || saved.targetLanguage !== '简体中文')
+                    ? saved.targetLanguage : defaultTargetLanguage(interfaceLanguage);
+                return { ...current, ...saved, interfaceLanguage, targetLanguage };
+            },
         }
     )
 );
