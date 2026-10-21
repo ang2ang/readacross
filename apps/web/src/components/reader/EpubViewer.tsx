@@ -1,217 +1,327 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { EpubView } from 'react-reader';
+import { EpubCFI } from 'epubjs';
+import type { Rendition, Contents, Location } from 'epubjs';
 import { ChevronLeft, ChevronRight, List, X } from 'lucide-react';
 import { useFileStore } from '../../store/useFileStore';
+import { useReadingStore } from '../../store/useReadingStore';
+import { quoteText } from '../../reading/policy';
+import type { ReaderBridge, SourceLocator, SourceSnapshot } from '../../reading/types';
 
-interface TocItem {
-    label: string;
-    href: string;
-    subitems?: TocItem[];
+interface TocItem { label: string; href: string; subitems?: TocItem[] }
+
+function resizeAt(rendition: Rendition, width: number, height: number, target?: string) {
+    // EPUB.js supports a destination argument that its bundled typings omit.
+    const resize = rendition.resize as (width: number, height: number, target?: string) => void;
+    resize.call(rendition, Math.round(width), Math.round(height), target);
 }
 
-interface EpubViewerProps {
-    fontSize?: number;
-}
-
-export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
-    const { file } = useFileStore();
-
-    const [location, setLocation] = useState<string | number | null>(0);
+export function EpubViewer({ fontSize = 100 }: { fontSize?: number }) {
+    const file = useFileStore(state => state.file);
+    const ready = useReadingStore(state => state.ready);
+    const savedPosition = useReadingStore(state => state.document?.position);
+    const [location, setLocation] = useState<string | number | null>(null);
     const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
     const [toc, setToc] = useState<TocItem[]>([]);
     const [showToc, setShowToc] = useState(false);
-    const renditionRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    // Read file as ArrayBuffer
+    const [navigationError, setNavigationError] = useState<string | null>(null);
+    const renditionRef = useRef<Rendition | null>(null);
+    const readerPane = useRef<HTMLDivElement>(null);
+    const attached = useRef(false);
+    const current = useRef<Location | null>(null);
+    const highlighted = useRef<string | null>(null);
+    const highlightVersion = useRef(0);
+    const bridgeRef = useRef<ReaderBridge | null>(null);
+    const active = useRef(true);
+    const fontRef = useRef(fontSize);
+    const navigationVersion = useRef(0);
+    const destination = useRef<{ target: string; section: number; anchor: string | null; cfi: boolean } | null>(null);
+    const cancelNavigation = useCallback(() => {
+        navigationVersion.current++;
+        destination.current = null;
+    }, []);
     useEffect(() => {
-        if (file instanceof Blob) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                if (e.target?.result instanceof ArrayBuffer) {
-                    setBookData(e.target.result);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
+        let cancelled = false;
+        if (file) void file.arrayBuffer().then(data => { if (!cancelled) setBookData(data); });
+        return () => { cancelled = true; };
     }, [file]);
 
-    const locationChanged = (epubcifi: string | number) => {
-        setLocation(epubcifi);
-    };
+    useEffect(() => {
+        const pane = readerPane.current;
+        if (!pane) return;
+        let previous = '';
+        const observer = new ResizeObserver(entries => {
+            const { width, height } = entries[0].contentRect;
+            const size = `${Math.round(width)}:${Math.round(height)}`;
+            if (width > 0 && height > 0 && size !== previous) {
+                previous = size;
+                const rendition = renditionRef.current;
+                if (rendition && attached.current) resizeAt(rendition, width, height,
+                    destination.current?.target || current.current?.start.cfi);
+            }
+        });
+        observer.observe(pane);
+        return () => observer.disconnect();
+    }, [bookData, ready]);
 
-    const tocChanged = (newToc: TocItem[]) => {
-        setToc(newToc);
+    const getLocation = (): SourceLocator | null => {
+        const value = current.current?.start;
+        return value ? { type: 'epub', cfi: value.cfi, section: value.index } : null;
     };
-
+    const destinationReached = (value: Location, rendition: Rendition) => {
+        const target = destination.current;
+        if (!target) return true;
+        if (value.start.index !== target.section) return false;
+        if (target.cfi) {
+            const cfi = new EpubCFI();
+            return cfi.compare(value.start.cfi, target.target) <= 0 && cfi.compare(target.target, value.end.cfi) <= 0;
+        }
+        if (!target.anchor) return value.start.displayed.page === 1;
+        const pane = readerPane.current?.getBoundingClientRect();
+        if (!pane) return false;
+        return (rendition.getContents() as unknown as Contents[]).some(contents => {
+            const element = contents.document.getElementById(target.anchor!);
+            const frame = contents.window.frameElement?.getBoundingClientRect();
+            if (!element || !frame) return false;
+            return [...element.getClientRects()].some(rect => rect.height > 0
+                && frame.left + rect.left >= pane.left - 2 && frame.left + rect.left < pane.right
+                && frame.top + rect.top >= pane.top - 2 && frame.top + rect.top < pane.bottom);
+        });
+    };
+    const displayTarget = async (target: string, afterLayout = false) => {
+        const rendition = renditionRef.current;
+        if (!rendition) return;
+        const version = ++navigationVersion.current;
+        destination.current = null;
+        const section = rendition.book.spine.get(target);
+        if (!section) throw new Error('This EPUB section is unavailable.');
+        const hash = target.indexOf('#');
+        const intent = { target, section: section.index, cfi: target.startsWith('epubcfi('),
+            anchor: hash < 0 ? null : decodeURIComponent(target.slice(hash + 1)) || null };
+        destination.current = intent;
+        setNavigationError(null);
+        // Closing the TOC changes the reader width. Let that layout commit first;
+        // any intervening resize must use this destination rather than the old CFI.
+        try {
+            let resolved = target;
+            const anchor = intent.anchor;
+            if (anchor) {
+                await section.load(rendition.book.load.bind(rendition.book));
+                const doc = section.document;
+                const element = doc.getElementById(anchor);
+                if (!element) throw new Error('This EPUB anchor is unavailable.');
+                const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+                let text = walker.nextNode();
+                while (text && !text.textContent?.trim()) text = walker.nextNode();
+                if (text) {
+                    const range = doc.createRange(); range.setStart(text, 0); range.collapse(true);
+                    resolved = new EpubCFI(range, section.cfiBase).toString();
+                }
+            }
+            if (!active.current || version !== navigationVersion.current || renditionRef.current !== rendition) return;
+            destination.current = { ...intent, target: resolved, cfi: resolved.startsWith('epubcfi(') };
+            if (afterLayout) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+            if (!active.current || version !== navigationVersion.current || renditionRef.current !== rendition) return;
+            const bounds = readerPane.current?.getBoundingClientRect();
+            if (bounds && attached.current) resizeAt(rendition, bounds.width, bounds.height, resolved);
+            await rendition.display(resolved);
+            // EPUB.js applies theme overrides after its first layout. Reposition
+            // once that reflow has committed, especially at non-default font sizes.
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+            if (active.current && version === navigationVersion.current && renditionRef.current === rendition) {
+                await rendition.display(resolved);
+            }
+        } catch (error) {
+            if (version === navigationVersion.current) destination.current = null;
+            throw error;
+        }
+    };
+    const showHighlight = async (locator: SourceLocator | null) => {
+        const rendition = renditionRef.current;
+        const version = ++highlightVersion.current;
+        if (!rendition) return;
+        if (highlighted.current) rendition.annotations.remove(highlighted.current, 'highlight');
+        highlighted.current = null;
+        if (locator?.type !== 'epub' || !locator.quote) return;
+        try {
+            const range = rendition.getRange(locator.cfi);
+            // getRange only resolves a range in an already displayed chapter. Never navigate on hover.
+            if (!range || quoteText(range.toString()) !== quoteText(locator.quote)) return;
+            if (version !== highlightVersion.current || !active.current) return;
+            rendition.annotations.highlight(locator.cfi, {}, undefined, 'readacross-source', { fill: '#60a5fa', 'fill-opacity': '0.25' });
+            highlighted.current = locator.cfi;
+        } catch { /* Invalid or unloaded CFI falls back to section navigation. */ }
+    };
+    const navigate = async (locator: SourceLocator) => {
+        const rendition = renditionRef.current;
+        if (!rendition || locator.type !== 'epub') return;
+        let fallback = false;
+        try {
+            if (locator.quote) {
+                const range = await rendition.book.getRange(locator.cfi);
+                if (quoteText(range.toString()) !== quoteText(locator.quote)) throw new Error('Selection no longer matches.');
+            }
+            const start = new EpubCFI(locator.cfi); start.collapse(true);
+            await displayTarget(start.toString());
+        } catch {
+            // Section-level fallback is intentionally less precise.
+            const section = locator.section !== undefined ? rendition.book.spine.get(locator.section) : undefined;
+            if (!section) throw new Error('This saved section is unavailable.');
+            fallback = true;
+            await displayTarget(section.href);
+        }
+        if (active.current) await showHighlight(fallback ? null : locator);
+        if (fallback) return 'range' as const;
+    };
+    const readSource = async (): Promise<SourceSnapshot> => {
+        const rendition = renditionRef.current;
+        const value = current.current;
+        if (!rendition || !value) throw new Error('The current EPUB view is still loading.');
+        const locator: SourceLocator = { type: 'epub', cfi: value.start.cfi, endCfi: value.end.cfi, section: value.start.index };
+        try {
+            const start = await rendition.book.getRange(value.start.cfi);
+            const end = await rendition.book.getRange(value.end.cfi);
+            if (start.startContainer.ownerDocument === end.endContainer.ownerDocument) {
+                const range = start.startContainer.ownerDocument!.createRange();
+                range.setStart(start.startContainer, start.startOffset);
+                range.setEnd(end.endContainer, end.endOffset);
+                if (range.toString().trim()) return { text: range.toString().trim(), locator };
+            }
+        } catch { /* Retain the existing visible-element extraction fallback. */ }
+        const contents = rendition.getContents() as unknown as Contents[];
+        const texts: string[] = [];
+        const viewport = readerPane.current?.getBoundingClientRect();
+        for (const content of contents) {
+            const frame = content.window.frameElement?.getBoundingClientRect();
+            if (!frame || !viewport) continue;
+            content.document.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,blockquote,dd').forEach(element => {
+                const boxes = [...element.getClientRects()];
+                if (boxes.length && boxes.every(rect => rect.width > 0 && rect.height > 0
+                    && frame.left + rect.left >= viewport.left - 10 && frame.left + rect.right <= viewport.right + 10
+                    && frame.top + rect.top >= viewport.top - 10 && frame.top + rect.bottom <= viewport.bottom + 10)) {
+                    const text = element.textContent?.trim();
+                    if (text && !texts.includes(text)) texts.push(text);
+                }
+            });
+        }
+        return { text: texts.join('\n\n'), locator };
+    };
+    const locationChanged = (cfi: string | number) => setLocation(cfi);
+    const tocChanged = (items: TocItem[]) => setToc(items);
     const goToChapter = (href: string) => {
-        renditionRef.current?.display(href);
+        useReadingStore.getState().userNavigated();
+        const version = navigationVersion.current + 1;
+        void displayTarget(href, true).catch(() => {
+            if (active.current && navigationVersion.current === version) setNavigationError('This EPUB section could not be opened.');
+        });
         setShowToc(false);
     };
-
-    const getRendition = (rendition: any) => {
-        renditionRef.current = rendition;
-
-        const setFontSize = (size: number) => {
-            rendition.themes.register('custom', {
-                'body': {
-                    'font-size': `${size}% !important`,
-                },
-                'p, li, blockquote, dd': {
-                    'font-size': '1em !important',
-                    'line-height': '1.5 !important'
-                }
-            });
-            rendition.themes.select('custom');
-        };
-
-        // Set initial font size
-        setFontSize(fontSize);
-
-        // Handle selection
-        rendition.on('selected', (_cfiRange: string, contents: any) => {
-            const range = contents.window.getSelection().getRangeAt(0);
-            const text = range.toString();
-            if (text) {
-                const cleanText = text.replace(/\s+/g, ' ').trim();
-                useFileStore.getState().setSelection(cleanText);
-            }
-        });
-
-        // Handle keyboard navigation inside epub iframe
-        rendition.on('keyup', (event: KeyboardEvent) => {
-            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-                return;
-            }
-            if (event.key === 'ArrowLeft') {
-                rendition.prev();
-            } else if (event.key === 'ArrowRight') {
-                rendition.next();
-            }
-        });
+    const handlePrev = () => {
+        cancelNavigation(); setNavigationError(null);
+        useReadingStore.getState().userNavigated();
+        void renditionRef.current?.prev();
     };
-
-    // Set extraction function in store
-    useEffect(() => {
-        const getPageText = async () => {
-            if (!renditionRef.current) return '';
-            try {
-                const rendition = renditionRef.current;
-                const currentLoc = rendition.currentLocation();
-
-                if (currentLoc && currentLoc.start && currentLoc.end) {
-                    try {
-                        const book = rendition.book;
-                        if (book) {
-                            const startCfi = currentLoc.start.cfi;
-                            const endCfi = currentLoc.end.cfi;
-                            const range = await book.getRange(startCfi);
-                            const endRange = await book.getRange(endCfi);
-
-                            if (range && endRange) {
-                                const doc = range.startContainer.ownerDocument;
-                                const fullRange = doc.createRange();
-                                fullRange.setStart(range.startContainer, range.startOffset);
-                                fullRange.setEnd(endRange.endContainer, endRange.endOffset);
-                                const text = fullRange.toString();
-                                if (text && text.trim().length > 0) {
-                                    return text.trim();
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('CFI range extraction failed:', err);
-                    }
-                }
-
-                // Fallback: Get visible text from iframe
-                const contents = rendition.getContents();
-                if (!contents || contents.length === 0) return '';
-
-                const content = contents[0];
-                const doc = content.document;
-                const win = content.window;
-                const textElements = doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, dd');
-                const visibleTexts: string[] = [];
-
-                textElements.forEach((el: Element) => {
-                    const rect = el.getBoundingClientRect();
-                    const isInViewport =
-                        rect.left >= -10 &&
-                        rect.right <= win.innerWidth + 10 &&
-                        rect.top >= -10 &&
-                        rect.bottom <= win.innerHeight + 10;
-
-                    if (isInViewport && rect.width > 0 && rect.height > 0) {
-                        const text = (el as HTMLElement).innerText || el.textContent || '';
-                        const trimmedText = text.trim();
-                        if (trimmedText.length > 0 && !visibleTexts.includes(trimmedText)) {
-                            visibleTexts.push(trimmedText);
-                        }
-                    }
-                });
-
-                if (visibleTexts.length > 0) {
-                    return visibleTexts.join('\n\n').trim();
-                }
-
-                return '';
-            } catch (err) {
-                console.error('Error extracting epub page text:', err);
-                return '';
-            }
-        };
-
-        useFileStore.getState().setGetPageText(getPageText);
-        return () => useFileStore.getState().setGetPageText(null);
-    }, []);
-
-    // Update font size
-    useEffect(() => {
-        if (renditionRef.current) {
-            renditionRef.current.themes.register('custom', {
-                'body': {
-                    'font-size': `${fontSize}% !important`,
-                },
-                'p, li, blockquote, dd': {
-                    'font-size': '1em !important',
-                    'line-height': '1.5 !important'
+    const handleNext = () => {
+        cancelNavigation(); setNavigationError(null);
+        useReadingStore.getState().userNavigated();
+        void renditionRef.current?.next();
+    };
+    const keydown = (event?: KeyboardEvent) => {
+        if (!event) return;
+        if ((event.target as HTMLElement)?.closest('input,textarea,select,button,[role="menu"],[contenteditable="true"]') || event.metaKey || event.ctrlKey || event.altKey) return;
+        if (event.key === 'ArrowLeft') { event.preventDefault(); handlePrev(); }
+        if (event.key === 'ArrowRight') { event.preventDefault(); handleNext(); }
+    };
+    const getRendition = (rendition: Rendition) => {
+        renditionRef.current = rendition;
+        attached.current = false;
+        const initialTarget = savedPosition?.type === 'epub' ? savedPosition.cfi : null;
+        const initialVersion = navigationVersion.current;
+        if (initialTarget) rendition.once('rendered', () => {
+            // The first layout precedes theme overrides. Restore the saved CFI
+            // after those styles commit, unless the user has already navigated.
+            requestAnimationFrame(() => {
+                if (active.current && renditionRef.current === rendition && navigationVersion.current === initialVersion) {
+                    void displayTarget(initialTarget).catch(() => {
+                        if (active.current && renditionRef.current === rendition) setNavigationError('This EPUB position could not be restored.');
+                    });
                 }
             });
-            renditionRef.current.themes.select('custom');
-        }
+        });
+        rendition.on('attached', () => {
+            if (!active.current || renditionRef.current !== rendition || !readerPane.current) return;
+            attached.current = true;
+            const { width, height } = readerPane.current.getBoundingClientRect();
+            rendition.resize(Math.round(width), Math.round(height));
+        });
+        rendition.themes.fontSize(`${fontRef.current}%`);
+        rendition.on('relocated', (value: Location) => {
+            if (!active.current || renditionRef.current !== rendition || !destinationReached(value, rendition)) return;
+            destination.current = null;
+            current.current = value;
+            const position = getLocation();
+            if (position) useReadingStore.getState().reportPosition(position);
+        });
+        rendition.on('selected', (cfi: string, contents: Contents) => {
+            const text = contents.window.getSelection()?.toString().trim();
+            if (!text) return;
+            const locator: SourceLocator = { type: 'epub', cfi, quote: text, section: contents.sectionIndex };
+            useFileStore.getState().setSelection(text);
+            useReadingStore.getState().setSelection({ text, locator });
+        });
+        rendition.hooks.content.register((contents: Contents) => {
+            const manual = () => useReadingStore.getState().userNavigated();
+            contents.document.addEventListener('wheel', manual, { passive: true });
+            contents.document.addEventListener('touchstart', manual, { passive: true });
+            contents.document.addEventListener('pointerdown', manual, { passive: true });
+        });
+        const bridge: ReaderBridge = { getLocation, readSource, navigate, highlight: locator => { void showHighlight(locator); } };
+        bridgeRef.current = bridge;
+        useReadingStore.getState().setBridge(bridge);
+        useFileStore.getState().setGetPageText(async () => (await bridge.readSource()).text);
+    };
+    useEffect(() => {
+        active.current = true;
+        window.addEventListener('keydown', keydown);
+        return () => {
+            active.current = false;
+            cancelNavigation();
+            window.removeEventListener('keydown', keydown);
+            if (useReadingStore.getState().bridge === bridgeRef.current) useReadingStore.getState().setBridge(null);
+            useFileStore.getState().setGetPageText(null);
+            renditionRef.current = null; attached.current = false;
+        };
+        // The keyboard handler reads only the rendition ref.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cancelNavigation]);
+    useEffect(() => {
+        fontRef.current = fontSize;
+        const rendition = renditionRef.current;
+        if (!rendition) return;
+        rendition.themes.fontSize(`${fontSize}%`);
+        // Read the latest intent after reflow, since a TOC click may have happened
+        // since the font changed. Never replay a CFI captured before that click.
+        const frame = requestAnimationFrame(() => {
+            const target = destination.current?.target || current.current?.start.cfi;
+            if (target && active.current && renditionRef.current === rendition) void rendition.display(target).catch(() => {
+                if (active.current) setNavigationError('This EPUB position could not be restored.');
+            });
+        });
+        return () => cancelAnimationFrame(frame);
     }, [fontSize]);
 
-    const handlePrev = useCallback(() => {
-        renditionRef.current?.prev();
-    }, []);
+    if (!bookData || !ready) return <div className="p-10 text-center">Reading file...</div>;
 
-    const handleNext = useCallback(() => {
-        renditionRef.current?.next();
-    }, []);
-
-    // Handle keyboard navigation on main window
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if focus is in an input field
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-                return;
-            }
-
-            if (e.key === 'ArrowLeft') {
-                handlePrev();
-            } else if (e.key === 'ArrowRight') {
-                handleNext();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handlePrev, handleNext]);
-
-    if (!bookData) return <div className="p-10 text-center">Reading file...</div>;
+    const renderToc = (items: TocItem[], depth = 0): React.ReactNode => <ul className={depth ? 'pl-4 space-y-0.5' : 'space-y-0.5'}>
+        {items.map((item, index) => <li key={`${item.href}-${index}`}>
+            <button onClick={() => goToChapter(item.href)} title={item.label} data-epub-href={item.href}
+                className={`w-full text-left px-4 transition-colors truncate hover:bg-slate-100 ${depth ? 'py-1.5 text-xs text-slate-500' : 'py-2 text-sm text-slate-700'}`}>{item.label}</button>
+            {!!item.subitems?.length && renderToc(item.subitems, depth + 1)}
+        </li>)}
+    </ul>;
 
     return (
-        <div className="h-full w-full bg-slate-50 relative flex flex-col">
+        <div className="h-full w-full min-w-0 bg-slate-50 relative flex flex-col">
             {/* Navigation Bar */}
             <div className="flex items-center justify-center gap-4 py-2 bg-white border-b border-slate-200 shrink-0 z-20 relative">
                 {/* TOC Toggle Button */}
@@ -240,6 +350,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
                     Next <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
+            {navigationError && <p role="status" className="shrink-0 px-4 py-2 text-xs text-slate-600 border-b border-slate-200">{navigationError}</p>}
 
             {/* Main Content Area */}
             <div className="flex-1 relative overflow-hidden flex">
@@ -250,54 +361,31 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({ fontSize = 100 }) => {
                             <span className="text-sm font-semibold text-slate-700">Table of Contents</span>
                             <button
                                 onClick={() => setShowToc(false)}
+                                aria-label="Close table of contents"
                                 className="p-1 hover:bg-slate-200 rounded transition-colors"
                             >
                                 <X className="w-4 h-4 text-slate-500" />
                             </button>
                         </div>
-                        <nav className="py-2">
+                        <nav className="py-2" aria-label="Table of contents">
                             {toc.length === 0 ? (
                                 <p className="px-4 py-3 text-sm text-slate-400">No table of contents available</p>
                             ) : (
-                                <ul className="space-y-0.5">
-                                    {toc.map((item, index) => (
-                                        <li key={index}>
-                                            <button
-                                                onClick={() => goToChapter(item.href)}
-                                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors truncate"
-                                            >
-                                                {item.label}
-                                            </button>
-                                            {item.subitems && item.subitems.length > 0 && (
-                                                <ul className="pl-4">
-                                                    {item.subitems.map((subitem, subIndex) => (
-                                                        <li key={subIndex}>
-                                                            <button
-                                                                onClick={() => goToChapter(subitem.href)}
-                                                                className="w-full text-left px-4 py-1.5 text-xs text-slate-500 hover:bg-slate-100 transition-colors truncate"
-                                                            >
-                                                                {subitem.label}
-                                                            </button>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
+                                renderToc(toc)
                             )}
                         </nav>
                     </div>
                 )}
 
                 {/* Reader Content */}
-                <div className="flex-1 relative overflow-hidden h-full">
+                <div ref={readerPane} className="flex-1 min-w-0 relative overflow-hidden h-full">
                     <EpubView
                         url={bookData}
-                        location={location}
+                        location={location ?? (savedPosition?.type === 'epub' ? savedPosition.cfi : 0)}
                         locationChanged={locationChanged}
                         tocChanged={tocChanged}
                         getRendition={getRendition}
+                        handleKeyPress={keydown}
                         loadingView={<div className="absolute inset-0 flex items-center justify-center text-slate-400">Loading...</div>}
                         epubOptions={{
                             flow: 'paginated',

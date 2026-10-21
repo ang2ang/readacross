@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { ReadingStorageSettings } from './ReadingStorageSettings';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { type PromptStyle, type Provider, type CustomPrompt } from '@readacross/core';
 import { X, Settings, Key, Server, MessageSquare, Languages, Thermometer, Plus, Trash2, Edit2, Check, BookOpen } from 'lucide-react';
@@ -56,7 +57,9 @@ const EXAMPLE_PROMPTS = [
     }
 ];
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => isOpen ? <SettingsDialog onClose={onClose} /> : null;
+
+const SettingsDialog: React.FC<Pick<SettingsModalProps, 'onClose'>> = ({ onClose }) => {
     const settings = useSettingsStore();
 
     // Local state for draft settings (only saved on Done)
@@ -76,24 +79,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [editingContent, setEditingContent] = useState('');
-
-    // Reset draft to current settings when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setDraft({
-                provider: settings.provider,
-                apiKey: settings.apiKey,
-                baseUrl: settings.baseUrl,
-                model: settings.model,
-                temperature: settings.temperature,
-                targetLanguage: settings.targetLanguage,
-                promptStyle: settings.promptStyle,
-                customPrompts: settings.customPrompts,
-                selectedCustomPromptId: settings.selectedCustomPromptId,
-            });
-            setEditingPromptId(null);
-        }
-    }, [isOpen, settings.provider, settings.apiKey, settings.baseUrl, settings.model, settings.temperature, settings.targetLanguage, settings.promptStyle, settings.customPrompts, settings.selectedCustomPromptId]);
 
     const handleSave = () => {
         // Apply all changes to the store
@@ -168,7 +153,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
     const handleAddPrompt = () => {
         const newPrompt: CustomPrompt = {
-            id: `prompt_draft_${Date.now()}`,
+            id: `prompt_draft_${crypto.randomUUID()}`,
             name: `Custom ${draft.customPrompts.length + 1}`,
             prompt: '',
         };
@@ -232,7 +217,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         } else {
             // Create a new prompt with the example
             const newPrompt: CustomPrompt = {
-                id: `prompt_draft_${Date.now()}`,
+                id: `prompt_draft_${crypto.randomUUID()}`,
                 name: example.name,
                 prompt: example.prompt,
             };
@@ -247,31 +232,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         }
     };
 
-    // Auto-save editing prompt content on blur or when switching
-    useEffect(() => {
-        if (editingPromptId) {
-            handleSaveEditingPrompt();
-        }
-    }, [editingName, editingContent]);
-
-    if (!isOpen) return null;
+    const updateEditingPrompt = (name: string, content: string) => {
+        setEditingName(name); setEditingContent(content);
+        setDraft(current => ({ ...current, customPrompts: current.customPrompts.map(prompt =>
+            prompt.id === editingPromptId ? { ...prompt, name, prompt: content } : prompt) }));
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div role="dialog" aria-modal="true" aria-label="Translation settings" data-reader-modal className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                onKeyDown={event => {
+                    if (event.key === 'Escape') { event.stopPropagation(); handleCancel(); return; }
+                    if (event.key !== 'Tab') return;
+                    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')]
+                        .filter(element => element.getClientRects().length);
+                    const first = items[0]; const last = items.at(-1);
+                    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+                    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+                }}>
                 {/* Header - Fixed */}
                 <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                     <div className="flex items-center gap-2 font-semibold text-slate-800">
                         <Settings className="w-5 h-5 text-slate-600" />
                         Translation Settings
                     </div>
-                    <button onClick={handleCancel} className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+                    <button autoFocus aria-label="Close settings" onClick={handleCancel} className="p-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Content - Scrollable */}
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                    <ReadingStorageSettings />
                     <div className="space-y-4">
                         <label className="block text-sm font-medium text-slate-700">Provider</label>
                         <div className="grid grid-cols-2 gap-2">
@@ -492,7 +484,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         <input
                                             type="text"
                                             value={editingName}
-                                            onChange={(e) => setEditingName(e.target.value)}
+                                            onChange={(e) => updateEditingPrompt(e.target.value, editingContent)}
                                             placeholder="Prompt name..."
                                             className="flex-1 px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                         />
@@ -509,7 +501,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                     </div>
                                     <textarea
                                         value={editingContent}
-                                        onChange={(e) => setEditingContent(e.target.value)}
+                                        onChange={(e) => updateEditingPrompt(editingName, e.target.value)}
                                         placeholder="Enter your custom system prompt here...
 
 Example: 您是一位专业的翻译专家，请...

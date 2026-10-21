@@ -1,0 +1,85 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ReadAcross native storage checks</title>
+<style>body{font:15px system-ui;max-width:850px;margin:40px auto;line-height:1.6}button{padding:12px}pre{white-space:pre-wrap}</style>
+<h1>Native IndexedDB checks</h1><p>Run on a disposable local origin with no existing ReadAcross records. Uses fixed test data and no model requests. Removes only the records it creates.</p><button id="run">Run storage checks</button><button id="fallback">Prepare locator fallback fixtures</button><pre id="results"></pre>
+<script type="module">
+import {readingStorage as storage} from '../src/reading/storage.ts';
+import {DAY,STORAGE_BUDGET,digest} from '../src/reading/policy.ts';
+const results=document.querySelector('#results');
+const assert=(value,message)=>{if(!value)throw Error(message);results.textContent+=`PASS ${message}\n`};
+const ids=[];
+const record=(id,extra={})=>({id,name:id+'.pdf',type:'pdf',lastOpenedAt:Date.now(),position:{type:'pdf',page:2,y:.4},fontSize:120,translationScroll:80,fileBytes:0,translationBytes:0,translationCount:0,...extra});
+const entry=(id,doc)=>({id,documentId:doc,originalText:'source',translation:'完整译文',createdAt:new Date().toISOString(),scope:'page',locator:{type:'pdf',page:2},settings:{provider:'local',model:'mock',targetLanguage:'zh',promptStyle:'General',temperature:1,systemPrompt:'Translate',endpointHash:'mock'}});
+document.querySelector('#fallback').onclick=async()=>{
+ const button=document.querySelector('#fallback');button.disabled=true;
+ try{
+  for(const type of ['pdf','epub']){
+   const bytes=await(await fetch(`/tests/fixtures/reading.${type}`)).arrayBuffer();const id=await digest(bytes);
+   const loaded=await storage.load(id);const base=loaded.document||record(id,{type,name:`reading.${type}`,position:null});
+   const doc=await storage.open({...base,lastOpenedAt:Date.now(),storageVersion:loaded.version},new File([bytes],`reading.${type}`));
+   const locator=type==='pdf'?{type,page:1,quote:'Deliberately mismatched selection',rects:[{x:.8,y:.8,width:.1,height:.1}]}:
+    {type,cfi:doc.position?.type==='epub'?doc.position.cfi:'epubcfi(/6/2[one]!/4/2/1:0)',section:0,quote:'Deliberately mismatched selection'};
+   await storage.saveTranslation(doc,{...entry(`locator-fallback-${type}`,id),scope:'selection',originalText:'Invalid selection audit',translation:'Locator fallback audit: show the page or section without an inaccurate highlight.',locator});
+  }
+  results.textContent+='FALLBACK FIXTURES READY (reading.pdf / reading.epub)\n';
+ }catch(error){results.textContent+='FAIL '+error.stack+'\n'}finally{button.disabled=false}
+};
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;results.textContent='';
+ try{
+  if((await storage.recent()).length)throw Error('Existing records detected. Use a fresh local origin.');
+  const id=await digest('native-test');ids.push(id);let doc=await storage.open(record(id),new File(['native-test'],'native.pdf'));
+  doc=await storage.saveTranslation(doc,entry('entry-1',id));
+  let loaded=await storage.load(id);
+  assert(loaded.translations[0].translation==='完整译文'&&loaded.document.fontSize===120,'committed translation, settings and position survive reloading from IndexedDB');
+  assert(await (await storage.file(id)).text()==='native-test','original Blob round trip');
+  const committing=storage.saveTranslation({...doc,position:{type:'pdf',page:4,y:.2,anchor:'center'},fontSize:140,pdfFitWidth:false,translationScroll:222},entry('queued-entry',id));
+  const restoring=storage.load(id);await committing;
+  const latest=await restoring;
+  assert(latest.translations.length===2,'restore waits for already queued complete translation writes');
+  assert(latest.document.position.page===4&&latest.document.position.anchor==='center'&&latest.document.fontSize===140&&latest.document.pdfFitWidth===false&&latest.document.translationScroll===222,'translation commit persists the latest reading settings snapshot');
+  await storage.open(record(id,{name:'renamed.pdf'}),new File(['native-test'],'renamed.pdf'));
+  assert((await storage.load(id)).translations.length===2,'reopening same content retains complete translations');
+  for(let i=0;i<5;i++){const name='native-'+i;ids.push(name);await storage.open(record(name,{lastOpenedAt:Date.now()+i+1}),new File(['copy'],'copy.pdf'))}
+  assert((await storage.recent()).length===5,'recent list stays at five');
+  assert(!(await storage.file(id))&&(await storage.load(id)).translations.length===2,'sixth original evicts old copy and keeps its translation');
+  // Force the scheduled expiry sweep through native IDB, while exercising the production cleanup path.
+  const old=ids.at(-1);await storage.update(old,{position:{type:'pdf',page:7}});
+  let oldDoc=(await storage.load(old)).document;oldDoc.lastOpenedAt=Date.now()-11*DAY;
+  const db=await new Promise(resolve=>{const r=indexedDB.open('readacross-reading');r.onsuccess=()=>resolve(r.result)});
+  await new Promise((resolve,reject)=>{const tx=db.transaction(['documents','meta'],'readwrite');tx.objectStore('documents').put(oldDoc);tx.objectStore('meta').put(0,'lastSweep');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error)});db.close();
+  await storage.maintain(null);
+  assert(!(await storage.file(old))&&(await storage.load(old)).document.position.page===7,'expiry removes original only, preserving locator');
+  const huge='native-oversize';ids.push(huge);const hugeDoc=await storage.open(record(huge),new File([new Uint8Array(STORAGE_BUDGET+1)],'huge.pdf'));
+  assert(hugeDoc.fileBytes===0,'oversize original is not retained');
+  assert((await storage.saveTranslation(hugeDoc,entry('huge-entry',huge))).translationCount===1,'oversize document still saves translation and position');
+  const fresh='native-quota';ids.push(fresh);const freshDoc=await storage.open(record(fresh),new File(['copy'],'quota.pdf'));
+  const put=IDBObjectStore.prototype.put;let once=true;
+  IDBObjectStore.prototype.put=function(...args){if(this.name==='translations'&&once){once=false;throw new DOMException('Quota exceeded','QuotaExceededError')}return put.apply(this,args)};
+  let retried;try{retried=await storage.saveTranslation(freshDoc,entry('quota-entry',fresh))}finally{IDBObjectStore.prototype.put=put}
+  assert(retried.fileBytes===0&&(await storage.load(fresh)).translations.length===1,'quota write rolls back, then retries without original');
+  IDBObjectStore.prototype.put=function(...args){if(this.name==='translations')throw new Error('Simulated write failure');return put.apply(this,args)};
+  let failed=false;try{await storage.saveTranslation(retried,entry('failed-entry',fresh))}catch{failed=true}finally{IDBObjectStore.prototype.put=put}
+  assert(failed&&(await storage.load(fresh)).translations.length===1,'failed write never claims success or leaves partial records');
+  await storage.remove(fresh);await storage.update(fresh,{fontSize:140},retried.storageVersion);
+  assert(!(await storage.load(fresh)).document,'late position update cannot recreate deleted record');
+  let staleRejected=false;try{await storage.saveTranslation(retried,entry('stale-entry',fresh))}catch{staleRejected=true}
+  assert(staleRejected&&!(await storage.load(fresh)).document,'late translation from another tab cannot recreate a deleted record');
+  const reopened=await storage.open({...record(fresh),storageVersion:(await storage.load(fresh)).version},new File(['copy'],'quota.pdf'));
+  let oldOpenRejected=false;try{await storage.open(retried,new File(['copy'],'quota.pdf'))}catch{oldOpenRejected=true}
+  assert(oldOpenRejected,'an old pending open cannot overwrite a new document generation');
+  await storage.update(fresh,{fontSize:149},retried.storageVersion);
+  assert((await storage.load(fresh)).document.fontSize===120,'old generation position updates cannot alter reopened records');
+  await storage.saveTranslation(reopened,entry('reopened-entry',fresh));
+  await storage.remove(fresh);
+  let secondRejected=false;try{await storage.saveTranslation(retried,entry('stale-entry',fresh))}catch{secondRejected=true}
+  assert(secondRejected,'repeated deletion does not re-authorize older callbacks');
+  const beforeClear=(await storage.load(id)).document;
+  await storage.remove();ids.length=0;
+  let clearRejected=false;try{await storage.saveTranslation(beforeClear,entry('cleared-entry',id))}catch{clearRejected=true}
+  assert(clearRejected&&!(await storage.load(id)).document,'clear-all invalidates old callbacks from every document');
+  ids.push(id);const reselected=await storage.open({...record(id),storageVersion:(await storage.load(id)).version},new File(['native-test'],'native.pdf'));
+  assert((await storage.saveTranslation(reselected,entry('after-clear',id))).translationCount===1,'explicit reselect and translation can save again after clear-all');
+  results.textContent+='ALL NATIVE CHECKS PASSED\n';
+ }catch(error){results.textContent+='FAIL '+error.stack+'\n'}finally{for(const id of ids)await storage.remove(id);document.querySelector('#run').disabled=false}
+};
+</script></html>

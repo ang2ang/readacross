@@ -1,0 +1,89 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /PageLabels << /Nums [0 << /S /r >> 1 << /S /D /St 58 >>] >> /Names << /Dests << /Names [(chapter-three) [9 0 R /Fit]] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 6 0 R 9 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 12 0 R >> >> /Contents 4 0 R /Annots [5 0 R 13 0 R 14 0 R 15 0 R 16 0 R] >>
+endobj
+4 0 obj
+<< /Length 347 >>
+stream
+BT /F1 16 Tf 48 780 Td (Linked PDF - Contents) Tj ET
+BT /F1 16 Tf 48 710 Td (Chapter two - direct page link) Tj ET
+BT /F1 16 Tf 48 660 Td (Chapter three - named destination) Tj ET
+BT /F1 16 Tf 48 610 Td (External link - example.com) Tj ET
+BT /F1 16 Tf 48 560 Td (Chapter two - page label 58) Tj ET
+BT /F1 16 Tf 48 510 Td (Broken destination) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 700 360 730] /Border [0 0 1] /Contents (Chapter two - direct page link) /Dest [6 0 R /Fit] >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 12 0 R >> >> /Contents 7 0 R /Annots [8 0 R] >>
+endobj
+7 0 obj
+<< /Length 99 >>
+stream
+BT /F1 16 Tf 48 780 Td (Chapter two - Page 2) Tj ET
+BT /F1 16 Tf 48 710 Td (Back to contents) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 700 250 730] /Border [0 0 1] /Contents (Back to contents) /Dest [3 0 R /Fit] >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 12 0 R >> >> /Contents 10 0 R /Annots [11 0 R] >>
+endobj
+10 0 obj
+<< /Length 101 >>
+stream
+BT /F1 16 Tf 48 780 Td (Chapter three - Page 3) Tj ET
+BT /F1 16 Tf 48 710 Td (Back to contents) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 700 250 730] /Border [0 0 1] /Contents (Back to contents) /Dest [3 0 R /Fit] >>
+endobj
+12 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 650 410 680] /Border [0 0 1] /Contents (Chapter three - named destination) /A << /S /GoTo /D (chapter-three) >> >>
+endobj
+14 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 600 340 630] /Border [0 0 1] /Contents (External link - example.com) /A << /S /URI /URI (https://example.com/) >> >>
+endobj
+15 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 550 380 580] /Border [0 0 1] /Contents (Chapter two - page label 58) /Dest (page58) >>
+endobj
+16 0 obj
+<< /Type /Annot /Subtype /Link /Rect [45 500 300 530] /Border [0 0 1] /Contents (Broken destination) /Dest (missing-chapter) >>
+endobj
+xref
+0 17
+0000000000 65535 f 
+0000000009 00000 n 
+0000000183 00000 n 
+0000000252 00000 n 
+0000000423 00000 n 
+0000000821 00000 n 
+0000000971 00000 n 
+0000001114 00000 n 
+0000001263 00000 n 
+0000001399 00000 n 
+0000001544 00000 n 
+0000001697 00000 n 
+0000001834 00000 n 
+0000001905 00000 n 
+0000002077 00000 n 
+0000002251 00000 n 
+0000002395 00000 n 
+trailer
+<< /Size 17 /Root 1 0 R >>
+startxref
+2539
+%%EOF

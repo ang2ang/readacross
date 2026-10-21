@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ReadAcross PDF link checks</title>
+<style>#checks{position:fixed;right:16px;bottom:16px;z-index:100;background:white;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font:13px system-ui;box-shadow:0 2px 10px #0002}#results{white-space:pre-wrap;max-width:400px}button{cursor:pointer}</style>
+<div id="root"></div><aside id="checks"><button id="run">Run PDF link checks</button><pre id="results">Uses the linked test PDF, no model requests.</pre></aside>
+<script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {ReaderLayout} from '../src/components/reader/ReaderLayout.tsx';
+import {useFileStore} from '../src/store/useFileStore.ts';
+import {useReadingStore} from '../src/store/useReadingStore.ts';
+import '../src/index.css';
+
+createRoot(document.querySelector('#root')).render(React.createElement(ReaderLayout));
+const results=document.querySelector('#results');
+const waitFor=async condition=>{
+ const end=Date.now()+5000;
+ while(Date.now()<end){if(condition())return;await new Promise(resolve=>setTimeout(resolve,25))}
+ throw Error('Timed out waiting for linked page');
+};
+const page=()=>Number(document.querySelector('input[aria-label="Page number"]')?.value);
+const link=name=>document.querySelector(`.annotationLayer a[title="${name}"]`);
+const pass=message=>{results.textContent+=`PASS ${message}\n`};
+const follow=async(name,target,heading)=>{
+ await waitFor(()=>link(name));link(name).click();
+ await waitFor(()=>page()===target && document.querySelector('.react-pdf__Page__textContent')?.textContent.includes(heading));
+ pass(`${name} -> page ${target}`);
+};
+document.querySelector('#run').onclick=async()=>{
+ const button=document.querySelector('#run');button.disabled=true;results.textContent='';
+ try{
+  const bytes=await(await fetch('/tests/fixtures/linked.pdf')).arrayBuffer();
+  useFileStore.getState().setFile(new File([bytes],'linked.pdf',{type:'application/pdf'}));
+  await waitFor(()=>useReadingStore.getState().ready && useReadingStore.getState().bridge);
+  // Start from the contents even if this disposable fixture was opened before.
+  const bridge=useReadingStore.getState().bridge;
+  await bridge.navigate({type:'pdf',page:1,y:0});
+  await follow('Chapter two - direct page link',2,'Chapter two - Page 2');
+  await follow('Back to contents',1,'Linked PDF - Contents');
+  await follow('Chapter three - named destination',3,'Chapter three - Page 3');
+  await follow('Back to contents',1,'Linked PDF - Contents');
+  await follow('Chapter two - page label 58',2,'Chapter two - Page 2');
+  await follow('Back to contents',1,'Linked PDF - Contents');
+  if(!document.querySelector('.annotationLayer a[href="https://example.com/"]'))throw Error('External URL was intercepted');
+  pass('external URL is retained without opening it');
+  await waitFor(()=>link('Broken destination'));link('Broken destination').click();
+  await waitFor(()=>document.querySelector('#reader-content [role="status"]')?.textContent.includes('destination is missing'));
+  if(page()!==1)throw Error('Broken destination moved to another page');
+  pass('unresolved destination shows feedback without changing the page');
+  results.textContent+='ALL PDF LINK CHECKS PASSED';
+ }catch(error){results.textContent+='FAIL '+error.message}finally{button.disabled=false}
+};
+</script></html>

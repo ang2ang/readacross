@@ -1,537 +1,266 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { X, Play, Loader2, Sparkles, PanelRightClose, Trash2, ChevronDown, ChevronRight, Square, Copy, Check, Download, FileText } from 'lucide-react';
-import { translateText, buildSystemPrompt, buildObsidianNote } from '@readacross/core';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, Check, ChevronDown, ChevronRight, Copy, Download, Loader2, MapPin, PanelRightClose, Play, Sparkles, Square, Trash2, X } from 'lucide-react';
+import { buildSystemPrompt, translateText } from '@readacross/core';
+import type { PromptStyle } from '@readacross/core';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useFileStore } from '../../store/useFileStore';
-
-interface TranslationEntry {
-    id: number;
-    originalText: string;
-    translation: string;
-    timestamp: Date;
-}
+import { useReadingStore } from '../../store/useReadingStore';
+import { compareRecords, digest, normalizeText, translationKey } from '../../reading/policy';
+import { buildReadingMarkdown } from '../../reading/markdown';
+import { locationLabel } from '../../reading/types';
+import type { TranslationRecord, TranslationSettings } from '../../reading/types';
 
 interface TranslationPanelProps {
-    originalText: string;
     onClose: () => void;
     isOpen: boolean;
     autoTranslate?: boolean;
     onAutoTranslateConsumed?: () => void;
     getLatestSelection?: () => string;
 }
+interface Draft { revision: number; text: string; translation: string; loading: boolean }
 
-export const TranslationPanel: React.FC<TranslationPanelProps> = ({ onClose, isOpen, autoTranslate, onAutoTranslateConsumed, getLatestSelection }) => {
+export function TranslationPanel({ onClose, isOpen, autoTranslate, onAutoTranslateConsumed, getLatestSelection }: TranslationPanelProps) {
     const settings = useSettingsStore();
-    const getPageText = useFileStore(state => state.getPageText);
-    const selection = useFileStore(state => state.selection);
-    const newContentStart = useFileStore(state => state.newContentStart);
-    const clearNewContentStart = useFileStore(state => state.clearNewContentStart);
-    const pastedText = useFileStore(state => state.pastedText);
-    const inputMode = useFileStore(state => state.inputMode);
-    const file = useFileStore(state => state.file);
-    const fileType = useFileStore(state => state.fileType);
-    const images = useFileStore(state => state.images);
-    const [history, setHistory] = useState<TranslationEntry[]>([]);
-    const [currentTranslation, setCurrentTranslation] = useState('');
-    const [currentOriginalText, setCurrentOriginalText] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const entryIdRef = useRef(0);
-    const abortControllerRef = useRef<AbortController | null>(null);
-    const [copiedId, setCopiedId] = useState<number | null>(null);
-    const [obsidianStatus, setObsidianStatus] = useState<string | null>(null);
-    const [hasSelection, setHasSelection] = useState(false);
+    const { file, inputMode, pastedText, images, selection, getPageText, newContentStart, clearNewContentStart } = useFileStore();
+    const { revision, session, document: savedDocument, entries: savedEntries, ready, status, error: storageError, bridge } = useReadingStore();
+    const [temporary, setTemporary] = useState<{ session: number; entries: TranslationRecord[] }>({ session, entries: [] });
+    const [draft, setDraft] = useState<Draft | null>(null);
+    const [failure, setFailure] = useState<{ revision: number; message: string } | null>(null);
+    const [feedback, setFeedback] = useState<{ revision: number; message: string } | null>(null);
+    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [copied, setCopied] = useState('');
+    const [exportOpen, setExportOpen] = useState(false);
+    const [newOutput, setNewOutput] = useState({ session, value: false });
+    const [windowSelection, setWindowSelection] = useState(false);
+    const scroll = useRef<HTMLDivElement>(null);
+    const exportArea = useRef<HTMLDivElement>(null);
+    const exportButton = useRef<HTMLButtonElement>(null);
+    const request = useRef<{ controller: AbortController; revision: number } | null>(null);
+    const following = useRef(true);
+    const restored = useRef<number | null>(null);
+    const observedOutput = useRef({ session: -1, characters: 0, count: 0 });
+    const activeDraft = draft?.revision === revision ? draft : null;
+    const loading = !!activeDraft?.loading;
+    const entries = file ? savedEntries : temporary.session === session ? temporary.entries : [];
+    const history = [...entries].sort(compareRecords);
+    const error = failure?.revision === revision ? failure.message : null;
+    const info = feedback?.revision === revision ? feedback.message : null;
+    const hasSelection = !!selection.trim() || windowSelection;
 
-    // Listen for selection changes to update button state in real-time
-    // Only consider selections within the reader area (not the translation panel)
     useEffect(() => {
-        const checkSelection = () => {
-            const storeSelection = useFileStore.getState().selection;
-
-            // Check if window selection is within the reader content (not translation panel)
-            let windowSelectionValid = false;
-            const windowSelection = window.getSelection();
-            if (windowSelection && windowSelection.toString().trim().length > 0) {
-                const anchorNode = windowSelection.anchorNode;
-                if (anchorNode) {
-                    // Check if selection is within reader-content area
-                    const readerContent = document.getElementById('reader-content');
-                    if (readerContent && readerContent.contains(anchorNode)) {
-                        windowSelectionValid = true;
-                    }
-                }
-            }
-
-            setHasSelection(storeSelection.trim().length > 0 || windowSelectionValid);
+        const check = () => {
+            const value = window.getSelection();
+            const reader = document.getElementById('reader-content');
+            setWindowSelection(!!(value?.toString().trim() && value.anchorNode && reader?.contains(value.anchorNode)));
         };
-
-        // Check initially
-        checkSelection();
-
-        // Listen for selection changes
-        document.addEventListener('selectionchange', checkSelection);
-        return () => document.removeEventListener('selectionchange', checkSelection);
+        document.addEventListener('selectionchange', check);
+        return () => document.removeEventListener('selectionchange', check);
     }, []);
-
-    // Also update when store selection changes
+    useEffect(() => () => { request.current?.controller.abort(); request.current = null; }, [revision]);
     useEffect(() => {
-        const windowSelection = window.getSelection();
-        let windowSelectionValid = false;
-        if (windowSelection && windowSelection.toString().trim().length > 0) {
-            const anchorNode = windowSelection.anchorNode;
-            if (anchorNode) {
-                const readerContent = document.getElementById('reader-content');
-                if (readerContent && readerContent.contains(anchorNode)) {
-                    windowSelectionValid = true;
-                }
-            }
-        }
-        setHasSelection(selection.trim().length > 0 || windowSelectionValid);
-    }, [selection]);
-
-    const handleCopy = async (text: string, id: number) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopiedId(id);
-            setTimeout(() => setCopiedId(null), 2000);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
-    };
-
-    const getSourceTitle = () => {
-        if (file) return file.name;
-        if (inputMode === 'text') return 'Pasted Text';
-        if (inputMode === 'image') return `${images.length} Image${images.length > 1 ? 's' : ''} OCR`;
-        return 'ReadAcross Translation';
-    };
-
-    const getSourceLabel = () => {
-        if (fileType) return `ReadAcross Web Reader (${fileType.toUpperCase()})`;
-        if (inputMode === 'image') return 'ReadAcross Web Reader (OCR)';
-        if (inputMode === 'text') return 'ReadAcross Web Reader (Pasted Text)';
-        return 'ReadAcross Web Reader';
-    };
-
-    const buildCurrentObsidianNote = () => buildObsidianNote({
-        title: getSourceTitle(),
-        sourceType: 'web-reader',
-        sourceLabel: getSourceLabel(),
-        provider: settings.provider,
-        model: settings.model,
-        targetLanguage: settings.targetLanguage,
-        promptStyle: settings.promptStyle,
-        entries: history.map(entry => ({
-            id: `web-${entry.id}`,
-            sourceText: entry.originalText,
-            translatedText: entry.translation,
-            createdAt: entry.timestamp.toISOString(),
-        })),
-    });
-
-    const handleCopyObsidianMarkdown = async () => {
-        if (history.length === 0) return;
-        try {
-            const note = buildCurrentObsidianNote();
-            await navigator.clipboard.writeText(note.markdown);
-            setObsidianStatus(`Copied Markdown for ${note.defaultPath}`);
-        } catch (err) {
-            console.error('Failed to copy Obsidian Markdown:', err);
-            setObsidianStatus('Failed to copy Markdown.');
-        }
-    };
-
-    const handleDownloadObsidianMarkdown = () => {
-        if (history.length === 0) return;
-        try {
-            const note = buildCurrentObsidianNote();
-            const blob = new Blob([note.markdown], { type: 'text/markdown;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = note.fileName;
-            link.click();
-            URL.revokeObjectURL(url);
-            setObsidianStatus(`Downloaded ${note.fileName}`);
-        } catch (err) {
-            console.error('Failed to download Obsidian Markdown:', err);
-            setObsidianStatus('Failed to download Markdown.');
-        }
-    };
-
-    // Auto-scroll to bottom when new translation is added
+        if (!exportOpen) return;
+        const pointer = (event: PointerEvent) => {
+            if (!exportArea.current?.contains(event.target as Node)) setExportOpen(false);
+        };
+        const key = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { setExportOpen(false); exportButton.current?.focus(); }
+        };
+        document.addEventListener('pointerdown', pointer); document.addEventListener('keydown', key);
+        return () => { document.removeEventListener('pointerdown', pointer); document.removeEventListener('keydown', key); };
+    }, [exportOpen]);
+    useLayoutEffect(() => {
+        if (!isOpen || !scroll.current || (file && !ready) || restored.current === session) return;
+        scroll.current.scrollTop = savedDocument?.translationScroll || 0;
+        following.current = scroll.current.scrollHeight - scroll.current.clientHeight - scroll.current.scrollTop < 80;
+        restored.current = session;
+        observedOutput.current = { session, characters: activeDraft?.translation.length || 0, count: entries.length };
+    }, [isOpen, file, ready, savedDocument, session, activeDraft?.translation.length, entries.length]);
     useEffect(() => {
-        if (scrollRef.current && (currentTranslation || history.length > 0)) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [currentTranslation, history.length]);
-
-    // Auto-translate when entering from paste flow
-    useEffect(() => {
-        if (autoTranslate && isOpen && getPageText && !isLoading) {
-            onAutoTranslateConsumed?.();
-            // Small delay to ensure getPageText is set up
-            const timer = setTimeout(() => {
-                handleTranslatePage();
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [autoTranslate, isOpen, getPageText]);
-
-    const toggleExpand = (id: number) => {
-        setExpandedIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(id)) {
-                newSet.delete(id);
-            } else {
-                newSet.add(id);
-            }
-            return newSet;
+        if (!isOpen || restored.current !== session) return;
+        const previous = observedOutput.current;
+        const characters = activeDraft?.translation.length || 0;
+        if (previous.session === session && previous.characters === characters && previous.count === entries.length) return;
+        observedOutput.current = { session, characters, count: entries.length };
+        const frame = requestAnimationFrame(() => {
+            if (following.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+            else if (activeDraft?.translation || entries.length) setNewOutput({ session, value: true });
         });
-    };
+        return () => cancelAnimationFrame(frame);
+    }, [activeDraft?.translation, entries.length, isOpen, session]);
 
-    const handleTranslate = async (text?: string) => {
-        // Get the latest selection when clicking Translate if no specific text provided
-        const textToTranslate = text || (getLatestSelection ? getLatestSelection() : '');
-
-        if (!textToTranslate || textToTranslate.trim().length === 0) {
-            setError(text ? 'Could not extract page text.' : 'Please select text to translate.');
-            setIsLoading(false);
-            return;
-        }
-
-        if (!settings.apiKey && settings.provider !== 'local' && settings.provider !== 'hosted') {
-            setError('Please configure API Key in settings first.');
-            setIsLoading(false);
-            return;
-        }
-
-        setCurrentOriginalText(textToTranslate);
-        setIsLoading(true);
-        setError(null);
-        setCurrentTranslation('');
-
-        // Create new AbortController
+    const run = useCallback(async (scope: 'selection' | 'page') => {
+        if (request.current || (file && !ready)) return;
         const controller = new AbortController();
-        abortControllerRef.current = controller;
-
+        const task = { controller, revision };
+        request.current = task;
+        const valid = () => request.current === task && useReadingStore.getState().revision === revision && !controller.signal.aborted;
+        setFailure(null); setFeedback(null);
+        setDraft({ revision, text: '', translation: '', loading: true });
+        let originalText = '';
+        let fullTranslation = '';
         try {
-            const systemPrompt = buildSystemPrompt(
-                settings.promptStyle,
-                settings.targetLanguage,
-                settings.getActiveCustomPrompt()
-            );
-
-            let fullTranslation = '';
-            
-            await translateText(textToTranslate, {
-                provider: settings.provider,
-                apiKey: settings.apiKey,
-                baseUrl: settings.baseUrl,
-                model: settings.model,
-                temperature: settings.temperature,
-                systemPrompt,
-                signal: controller.signal,
-                onStream: (chunk) => {
-                    fullTranslation += chunk;
-                    setCurrentTranslation(fullTranslation);
-                }
-            });
-
-            // Only add to history if not aborted
-            if (!controller.signal.aborted) {
-                const newEntry: TranslationEntry = {
-                    id: ++entryIdRef.current,
-                    originalText: textToTranslate,
-                    translation: fullTranslation,
-                    timestamp: new Date(),
-                };
-                setHistory(prev => [...prev, newEntry]);
-            }
-            setCurrentTranslation('');
-            setCurrentOriginalText('');
-
-        } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            if (controller.signal.aborted) {
-                setError('Translation stopped by user.');
-            } else {
-                setError(err.message || 'Translation failed');
-            }
-        } finally {
-            setIsLoading(false);
-            abortControllerRef.current = null;
-        }
-    };
-
-    const handleStop = () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort('User stopped translation');
-            abortControllerRef.current = null;
-        }
-    };
-
-    const handleTranslatePage = async () => {
-        if (!getPageText) {
-            setError('Unable to extract page content from this viewer.');
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const pageText = await getPageText();
-            if (pageText && pageText.trim().length > 0) {
-                let textToTranslate = pageText;
-
-                // If there's newly appended content (in text mode), only translate the new part
+            const snapshot = file ? scope === 'page' ? await bridge?.readSource() : useReadingStore.getState().selection : null;
+            if (file) originalText = snapshot?.text || (scope === 'selection' ? selection : '');
+            else if (scope === 'selection') originalText = getLatestSelection?.() || selection;
+            else {
+                originalText = await getPageText?.() || '';
                 if (inputMode === 'text' && newContentStart !== null && pastedText) {
-                    const newContent = pastedText.slice(newContentStart);
-                    if (newContent.trim().length > 0) {
-                        textToTranslate = newContent;
-                    }
-                    // Clear the marker after using it
-                    clearNewContentStart();
+                    originalText = pastedText.slice(newContentStart); clearNewContentStart();
                 }
-
-                // Preserve paragraph structure: normalize multiple spaces to single space,
-                // but keep line breaks to maintain the original formatting
-                const cleanText = textToTranslate
-                    .replace(/[ \t]+/g, ' ')  // Normalize horizontal whitespace only
-                    .replace(/\n{3,}/g, '\n\n')  // Limit consecutive newlines to 2
-                    .trim();
-                await handleTranslate(cleanText);
-            } else {
-                setError('No text found on the current page.');
-                setIsLoading(false);
             }
-        } catch (err) {
-            setError('Failed to extract page text.');
-            setIsLoading(false);
+            if (!valid()) return;
+            originalText = normalizeText(originalText);
+            if (!originalText) throw new Error(scope === 'selection' ? 'Please select text in the original to translate.' : 'No text found on the current page.');
+            setDraft({ revision, text: originalText, translation: '', loading: true });
+            const systemPrompt = buildSystemPrompt(settings.promptStyle, settings.targetLanguage, settings.getActiveCustomPrompt());
+            const configuration: TranslationSettings = { provider: settings.provider, model: settings.model,
+                targetLanguage: settings.targetLanguage, promptStyle: settings.promptStyle, temperature: settings.temperature,
+                systemPrompt, endpointHash: await digest(settings.baseUrl || '') };
+            const id = file && savedDocument ? await translationKey(savedDocument.id, scope, originalText, snapshot?.locator, configuration) : crypto.randomUUID();
+            if (!valid()) return;
+            const cached = file ? useReadingStore.getState().entries.find(entry => entry.id === id) : null;
+            if (cached) {
+                const needsSave = useReadingStore.getState().unsavedEntries.includes(id);
+                setDraft(null); setFeedback({ revision, message: needsSave ? 'Showing the existing translation.' : 'Showing the saved translation.' });
+                if (needsSave) {
+                    await useReadingStore.getState().addEntry(cached, revision);
+                    if (!valid()) return;
+                    setFeedback({ revision, message: useReadingStore.getState().unsavedEntries.includes(id)
+                        ? 'Showing the existing translation · not saved.' : 'Showing the saved translation.' });
+                }
+                requestAnimationFrame(() => {
+                    const element = document.getElementById(`translation-${cached.id}`);
+                    if (element && scroll.current) scroll.current.scrollTop = element.offsetTop - scroll.current.offsetTop;
+                });
+                return;
+            }
+            if (!settings.apiKey && settings.provider !== 'local' && settings.provider !== 'hosted') throw new Error('Please configure an API key in settings first.');
+            await translateText(originalText, { provider: settings.provider, apiKey: settings.apiKey, baseUrl: settings.baseUrl,
+                model: settings.model, temperature: settings.temperature, systemPrompt, signal: controller.signal,
+                onStream: chunk => {
+                    if (!valid()) return;
+                    fullTranslation += chunk;
+                    setDraft({ revision, text: originalText, translation: fullTranslation, loading: true });
+                } });
+            if (!valid()) return;
+            if (!fullTranslation.trim()) throw new Error('The model returned an empty translation. Please try again.');
+            const entry: TranslationRecord = { id, documentId: file ? savedDocument?.id : undefined,
+                originalText, translation: fullTranslation, createdAt: new Date().toISOString(), scope,
+                locator: snapshot?.locator, settings: configuration };
+            setDraft(null);
+            if (file) await useReadingStore.getState().addEntry(entry, revision);
+            else setTemporary(previous => ({ session, entries: [...(previous.session === session ? previous.entries : []), entry] }));
+        } catch (cause) {
+            if (request.current !== task || useReadingStore.getState().revision !== revision) return;
+            setDraft(fullTranslation ? { revision, text: originalText, translation: fullTranslation, loading: false } : null);
+            setFailure({ revision, message: controller.signal.aborted ? 'Translation stopped. Unfinished output was not saved.' : cause instanceof Error ? cause.message : 'Translation failed.' });
+        } finally {
+            if (request.current === task) request.current = null;
         }
+    }, [file, ready, revision, bridge, selection, getLatestSelection, getPageText, inputMode, newContentStart, pastedText, clearNewContentStart, settings, savedDocument, session]);
+
+    useEffect(() => {
+        if (!file && autoTranslate && isOpen && getPageText && !loading) {
+            onAutoTranslateConsumed?.();
+            void run('page');
+        }
+    }, [file, autoTranslate, isOpen, getPageText, loading, onAutoTranslateConsumed, run]);
+
+    const exportNote = () => buildReadingMarkdown(file?.name || (inputMode === 'text' ? 'Pasted Text' : `${images.length} Image OCR`),
+        file ? savedDocument?.type.toUpperCase() || 'FILE' : inputMode === 'image' ? 'OCR' : 'Text', entries, savedDocument?.id);
+    const exportMarkdown = async (download: boolean) => {
+        setExportOpen(false);
+        try {
+            const note = exportNote();
+            if (download) {
+                const url = URL.createObjectURL(new Blob([note.markdown], { type: 'text/markdown;charset=utf-8' }));
+                const anchor = document.createElement('a'); anchor.href = url; anchor.download = note.fileName; anchor.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } else await navigator.clipboard.writeText(note.markdown);
+            setFeedback({ revision, message: download ? 'Markdown downloaded.' : 'Markdown copied.' });
+            setTimeout(() => setFeedback(null), 2500);
+        } catch { setFailure({ revision, message: 'Could not export Markdown. Please try again.' }); }
     };
-
-    const clearHistory = () => {
-        setHistory([]);
-        setCurrentTranslation('');
-        setCurrentOriginalText('');
-        setError(null);
-        setObsidianStatus(null);
+    const jumpToNew = () => {
+        if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+        following.current = true; setNewOutput({ session, value: false });
     };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="w-96 h-full bg-white border-l border-slate-200 flex flex-col shadow-xl shrink-0">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex items-center gap-2 font-semibold text-slate-700">
-                    <Sparkles className="w-5 h-5 text-blue-500" />
-                    AI Translation
+    return <div className="flex flex-col h-full w-full min-w-0">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-blue-50/60">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Sparkles className="w-4 h-4 text-blue-500" />AI Translation</div>
+            <div className="flex items-center gap-1">
+                {!file && entries.length > 0 && <button aria-label="Clear temporary translations" title="Clear temporary translations" className="p-2 text-slate-400 hover:text-red-500" onClick={() => { setTemporary({ session, entries: [] }); setDraft(null); }}><Trash2 className="w-4 h-4" /></button>}
+                <div className="relative" ref={exportArea}>
+                    <button ref={exportButton} disabled={!entries.length} aria-haspopup="menu" aria-expanded={exportOpen}
+                        className="flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50" onClick={() => setExportOpen(value => !value)}
+                        onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setExportOpen(true); requestAnimationFrame(() => exportArea.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()); } }}>Export<ChevronDown className="w-3 h-3" /></button>
+                    {exportOpen && <div role="menu" aria-label="Export completed translations" className="absolute right-0 top-full mt-1 z-30 w-48 p-1 bg-white rounded-lg border border-slate-200 shadow-lg"
+                        onKeyDown={event => {
+                            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                            event.preventDefault(); const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+                            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                            items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+                        }}>
+                        {file && <p className="px-2 py-1 text-[11px] text-slate-400">Completed translations in this file</p>}
+                        <button role="menuitem" onClick={() => void exportMarkdown(false)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Copy className="w-3.5 h-3.5" />Copy Markdown</button>
+                        <button role="menuitem" onClick={() => void exportMarkdown(true)} className="w-full flex gap-2 items-center rounded px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 focus:bg-slate-50"><Download className="w-3.5 h-3.5" />Download .md</button>
+                    </div>}
                 </div>
-                <div className="flex items-center gap-1">
-                    {history.length > 0 && (
-                        <button
-                            onClick={clearHistory}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Clear history"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    )}
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="Close sidebar"
-                    >
-                        <PanelRightClose className="w-5 h-5" />
-                    </button>
-                </div>
-            </div>
-
-            {/* Content - Translation History */}
-            <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
-                {/* Translation History */}
-                {history.map((entry) => (
-                    <div key={entry.id} className="space-y-2">
-                        {/* Collapsible Original Text */}
-                        <button
-                            onClick={() => toggleExpand(entry.id)}
-                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                        >
-                            {expandedIds.has(entry.id) ? (
-                                <ChevronDown className="w-3 h-3" />
-                            ) : (
-                                <ChevronRight className="w-3 h-3" />
-                            )}
-                            <span className="truncate max-w-[300px]">
-                                {entry.originalText.slice(0, 50)}{entry.originalText.length > 50 ? '...' : ''}
-                            </span>
-                        </button>
-
-                        {/* Expanded Original Text */}
-                        {expandedIds.has(entry.id) && (
-                            <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-600 border border-slate-200 leading-relaxed">
-                                {entry.originalText}
-                            </div>
-                        )}
-
-                        {/* Translation Result */}
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100 relative group">
-                            <p className="whitespace-pre-wrap leading-relaxed text-slate-800 text-sm pr-8">{entry.translation}</p>
-                            <button
-                                onClick={() => handleCopy(entry.translation, entry.id)}
-                                className="absolute top-2 right-2 p-1.5 rounded-md bg-white/80 hover:bg-white border border-slate-200 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-all"
-                                title="Copy translation"
-                            >
-                                {copiedId === entry.id ? (
-                                    <Check className="w-3.5 h-3.5 text-green-500" />
-                                ) : (
-                                    <Copy className="w-3.5 h-3.5" />
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                ))}
-
-                {/* Current Translation in Progress */}
-                {(isLoading || currentTranslation) && (
-                    <div className="space-y-2">
-                        <div className="text-xs text-slate-400 truncate max-w-[300px]">
-                            {currentOriginalText.slice(0, 50)}{currentOriginalText.length > 50 ? '...' : ''}
-                        </div>
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100">
-                            {currentTranslation ? (
-                                <p className="whitespace-pre-wrap leading-relaxed text-slate-800 text-sm">{currentTranslation}</p>
-                            ) : (
-                                <div className="flex items-center gap-2 text-slate-400">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span className="text-sm">Translating...</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Error */}
-                {error && (
-                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 flex items-start gap-2">
-                        <X className="w-4 h-4 mt-0.5 shrink-0" />
-                        {error}
-                    </div>
-                )}
-
-                {/* Empty state */}
-                {history.length === 0 && !currentTranslation && !error && !isLoading && (
-                    <div className="flex-1 flex items-center justify-center py-12">
-                        <div className="text-center text-slate-400">
-                            <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">Select text and click "Translate"</p>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
-                {history.length > 0 && (
-                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
-                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="truncate">Save to Obsidian</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={handleCopyObsidianMarkdown}
-                                className="flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-                            >
-                                <Copy className="w-3.5 h-3.5" />
-                                Copy Markdown
-                            </button>
-                            <button
-                                onClick={handleDownloadObsidianMarkdown}
-                                className="flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-                            >
-                                <Download className="w-3.5 h-3.5" />
-                                Download .md
-                            </button>
-                        </div>
-                        {obsidianStatus && (
-                            <div className="rounded-md bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">
-                                {obsidianStatus}
-                            </div>
-                        )}
-                    </div>
-                )}
-                <div className="flex items-center justify-between">
-                    <div className="relative">
-                        <select
-                            value={settings.promptStyle === 'Custom' && settings.selectedCustomPromptId
-                                ? `custom:${settings.selectedCustomPromptId}`
-                                : settings.promptStyle}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                if (value.startsWith('custom:')) {
-                                    const promptId = value.replace('custom:', '');
-                                    settings.setPromptStyle('Custom');
-                                    settings.selectCustomPrompt(promptId);
-                                } else {
-                                    settings.setPromptStyle(value as any);
-                                }
-                            }}
-                            className="appearance-none text-xs text-slate-600 font-medium pl-2 pr-6 py-1.5 bg-white rounded-md border border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer transition-colors"
-                        >
-                            <option value="General">General</option>
-                            <option value="Academic">Academic</option>
-                            <option value="Create">Creative</option>
-                            <option value="Philosophical">Philosophical</option>
-                            {settings.customPrompts.length > 0 && settings.customPrompts.map(p => (
-                                <option key={p.id} value={`custom:${p.id}`}>
-                                    {p.name}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    </div>
-                    <span className="text-xs text-slate-400">
-                        {settings.model}
-                    </span>
-                </div>
-                {isLoading ? (
-                    <button
-                        onClick={handleStop}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100"
-                    >
-                        <Square className="w-3.5 h-3.5 fill-current" />
-                        Stop
-                    </button>
-                ) : (
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => handleTranslate()}
-                            disabled={!hasSelection}
-                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all ${hasSelection
-                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200/50'
-                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                }`}
-                        >
-                            <Play className="w-4 h-4 fill-current" />
-                            Selection
-                        </button>
-                        <button
-                            onClick={handleTranslatePage}
-                            disabled={!getPageText}
-                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-all ${!getPageText
-                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200/50'
-                                }`}
-                        >
-                            <Play className="w-4 h-4 fill-current" />
-                            Page
-                        </button>
-                    </div>
-                )}
+                <button onClick={onClose} aria-label="Close sidebar" title="Close sidebar" className="p-2 text-slate-400 hover:text-slate-600"><PanelRightClose className="w-4 h-4" /></button>
             </div>
         </div>
-    );
-};
+        {file && <div className="px-4 py-2 text-xs text-slate-400" role="status">{status === 'loading' ? 'Saving / restoring…' : status === 'saved' ? 'Saved on this device' : status === 'translations-only' ? 'Translations saved · original file not retained' : 'Not saved on this device'}{storageError && <p className="mt-1 text-amber-700">{storageError}</p>}</div>}
+        <div ref={scroll} className="flex-1 min-h-0 overflow-auto p-4 space-y-4 relative" onScroll={event => {
+            const element = event.currentTarget;
+            following.current = element.scrollHeight - element.clientHeight - element.scrollTop < 80;
+            if (following.current) setNewOutput({ session, value: false });
+            if (file && ready && restored.current === session) useReadingStore.getState().setTranslationScroll(element.scrollTop);
+        }}>
+            {history.map(entry => <div key={entry.id} id={`translation-${entry.id}`} tabIndex={entry.locator ? 0 : undefined} className="space-y-2 outline-offset-4 focus-visible:outline-blue-400"
+                onMouseEnter={() => bridge?.highlight(entry.locator || null)} onMouseLeave={() => bridge?.highlight(null)}
+                onFocus={() => bridge?.highlight(entry.locator || null)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) bridge?.highlight(null); }}>
+                <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 w-full min-w-0 text-left" onClick={() => setExpanded(previous => { const next = new Set(previous); if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; })}>
+                    {expanded.has(entry.id) ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+                    <span className="truncate">{entry.locator && `${locationLabel(entry.locator)} · `}{entry.originalText.slice(0, 70)}</span>
+                </button>
+                {expanded.has(entry.id) && <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">{entry.originalText}</div>}
+                <div className="p-4 rounded-lg bg-blue-50/60 border border-blue-100 text-slate-800">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{entry.translation}</p>
+                    <div className="flex justify-end gap-2 mt-2 text-xs text-slate-400">
+                        <button aria-label="Copy translation" title="Copy translation" className="p-1.5 hover:text-blue-600 focus-visible:text-blue-600" onClick={async () => {
+                            try { await navigator.clipboard.writeText(entry.translation); setCopied(entry.id); setTimeout(() => setCopied(''), 2000); }
+                            catch { setFailure({ revision, message: 'Could not copy the translation.' }); }
+                        }}>{copied === entry.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}</button>
+                        {entry.locator && <button className="flex gap-1 items-center hover:text-blue-600" onClick={() => {
+                            void useReadingStore.getState().locate(entry.locator!);
+                            if (window.innerWidth < 1024) onClose();
+                        }}><MapPin className="w-3 h-3" />Locate source</button>}
+                    </div>
+                </div>
+            </div>)}
+            {activeDraft && <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm leading-relaxed text-slate-800 whitespace-pre-wrap break-words">
+                {activeDraft.translation || <span className="flex gap-2 items-center text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Translating…</span>}
+                {!activeDraft.loading && <p className="mt-2 text-xs text-amber-700">Incomplete · not saved or exported</p>}
+            </div>}
+            {error && <div role="alert" className="flex gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3"><X className="w-4 h-4 shrink-0" />{error}</div>}
+            {info && <p role="status" className="text-xs text-emerald-700">{info}</p>}
+            {!entries.length && !activeDraft && !error && <p className="py-12 text-center text-sm text-slate-400">Select text or translate the current page.</p>}
+        </div>
+        {newOutput.session === session && newOutput.value && <button onClick={jumpToNew} className="mx-auto mb-2 px-3 py-1.5 text-xs rounded-full border border-blue-100 bg-white text-blue-600 shadow-sm flex items-center gap-1">New translation<ArrowDown className="w-3 h-3" /></button>}
+        <div className="border-t border-slate-100 bg-slate-50 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <select aria-label="Translation style" className="min-w-0 max-w-[60%] text-xs py-1 px-2 border border-slate-200 rounded bg-white text-slate-600"
+                    value={settings.promptStyle === 'Custom' && settings.selectedCustomPromptId ? `custom:${settings.selectedCustomPromptId}` : settings.promptStyle}
+                    onChange={event => { const value = event.target.value; if (value.startsWith('custom:')) { settings.setPromptStyle('Custom'); settings.selectCustomPrompt(value.slice(7)); } else settings.setPromptStyle(value as PromptStyle); }}>
+                    <option value="General">General</option><option value="Academic">Academic</option><option value="Create">Creative</option><option value="Philosophical">Philosophical</option>
+                    {settings.customPrompts.map(prompt => <option key={prompt.id} value={`custom:${prompt.id}`}>{prompt.name}</option>)}
+                </select><span className="text-xs text-slate-400 truncate">{settings.model}</span>
+            </div>
+            {loading ? <button onClick={() => request.current?.controller.abort()} className="w-full flex justify-center items-center gap-2 rounded-lg py-2 text-sm text-rose-600 bg-rose-50 border border-rose-100"><Square className="w-3.5 h-3.5" />Stop</button>
+                : <div className="flex gap-2">
+                    <button disabled={!hasSelection || !!(file && !ready)} onClick={() => void run('selection')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 bg-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />Selection</button>
+                    <button disabled={file ? !ready || !bridge : !getPageText} onClick={() => void run('page')} className="flex-1 flex justify-center items-center gap-1.5 px-2 py-2 rounded-lg bg-blue-600 text-sm text-white disabled:opacity-40"><Play className="w-3.5 h-3.5" />{file && savedDocument?.type === 'epub' ? 'Current view' : 'Page'}</button>
+                </div>}
+        </div>
+    </div>;
+}
