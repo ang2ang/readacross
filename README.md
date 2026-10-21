@@ -1,6 +1,4 @@
-# ReadAcross
-
-![ReadAcross logo](apps/extension/assets/icon128.png)
+# <img src="apps/extension/assets/icon128.png" alt="" width="32" height="32" /> ReadAcross
 
 **English** | [简体中文](README.zh-CN.md)
 
