@@ -15,7 +15,9 @@ Read and translate documents, text, images, and webpages with AI.
 
 ## Browser extension
 
-Configure its model and target language separately in the extension popup.
+1. [Download the extension ZIP](downloads/readacross-extension-chrome.zip?raw=true) and extract it.
+2. Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted `readacross-extension` folder containing `manifest.json`.
+3. Open the extension popup to configure its model and target language.
 
 - **Webpages** — Translate inline, restore originals, and remember sites for automatic translation. Toggle with `Alt+T` (`Option+T` on Mac).
 - **GitHub** — Translate README/Markdown content and repository file views.

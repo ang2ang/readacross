@@ -15,7 +15,9 @@
 
 ## 浏览器扩展
 
-在扩展弹出窗口中单独配置模型和目标语言。
+1. [直接下载扩展 ZIP](downloads/readacross-extension-chrome.zip?raw=true)，解压得到插件文件夹。
+2. 打开 `chrome://extensions`，启用**开发者模式**，点击**加载已解压的扩展程序**，选择解压后的 `readacross-extension` 文件夹（内含 `manifest.json`）。
+3. 打开扩展弹出窗口，配置模型和目标语言。
 
 - **网页翻译**：行内显示译文、恢复原文，并记住需要自动翻译的网站。快捷键为 `Alt+T`，Mac 上为 `Option+T`。
 - **GitHub 适配**：翻译 README、Markdown 内容和仓库文件视图。
