@@ -15,7 +15,9 @@ Read and translate documents, text, images, and webpages with AI.
 
 ## Browser extension
 
-1. [Download the extension ZIP](downloads/readacross-extension-chrome.zip?raw=true) and extract it.
+This repository is private; sign in to a GitHub account with access before downloading.
+
+1. Open the [extension ZIP file page](downloads/readacross-extension-chrome.zip), click the top-right download icon (**Download raw file**), and extract the ZIP.
 2. Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted `readacross-extension` folder containing `manifest.json`.
 3. Open the extension popup to configure its model and target language.
 

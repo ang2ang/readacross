@@ -15,7 +15,9 @@
 
 ## 浏览器扩展
 
-1. [直接下载扩展 ZIP](downloads/readacross-extension-chrome.zip?raw=true)，解压得到插件文件夹。
+当前为私有仓库，请先登录有访问权限的 GitHub 账号。
+
+1. 打开[扩展 ZIP 文件页](downloads/readacross-extension-chrome.zip)，点击右上角下载图标（**Download raw file**），再解压得到插件文件夹。
 2. 打开 `chrome://extensions`，启用**开发者模式**，点击**加载已解压的扩展程序**，选择解压后的 `readacross-extension` 文件夹（内含 `manifest.json`）。
 3. 打开扩展弹出窗口，配置模型和目标语言。
 
