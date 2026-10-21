@@ -73,6 +73,11 @@ function getTranslationCacheKey(text: string): string {
 // Inject global styles for loading indicators
 function injectTranslationStyles() {
   if (document.getElementById("readacross-content-styles")) return
+  const parent = document.head || document.documentElement
+  if (!parent) {
+    document.addEventListener("DOMContentLoaded", injectTranslationStyles, { once: true })
+    return
+  }
   const style = document.createElement("style")
   style.id = "readacross-content-styles"
   style.textContent = `
@@ -121,7 +126,7 @@ function injectTranslationStyles() {
       to { opacity: 1; transform: translateY(0); }
     }
   `
-  document.head.appendChild(style)
+  parent.appendChild(style)
 }
 
 function createLoadingPlaceholder(block: HTMLElement): HTMLElement {
