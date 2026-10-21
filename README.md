@@ -1,4 +1,4 @@
-# <img src="apps/extension/assets/icon128.png" alt="" width="32" height="32" /> ReadAcross
+# <img src="apps/extension/assets/icon128.png" alt="" width="24" height="24" /> ReadAcross
 
 **English** | [简体中文](README.zh-CN.md)
 
