@@ -7,11 +7,14 @@ import {createRoot} from 'react-dom/client';
 import {ReaderLayout} from '../src/components/reader/ReaderLayout.tsx';
 import {useFileStore} from '../src/store/useFileStore.ts';
 import {useReadingStore} from '../src/store/useReadingStore.ts';
+import {useSettingsStore} from '../src/store/useSettingsStore.ts';
+import {translate} from '../src/i18n/messages.ts';
 import '../src/index.css';
 
 createRoot(document.querySelector('#root')).render(React.createElement(ReaderLayout));
 const results=document.querySelector('#results');
-const button=name=>[...document.querySelectorAll('#root button')].find(el=>el.getClientRects().length && (el.textContent.trim()===name || el.getAttribute('aria-label')===name));
+const t=text=>translate(useSettingsStore.getState().interfaceLanguage,text);
+const button=name=>[...document.querySelectorAll('#root button')].find(el=>el.getClientRects().length && (el.textContent.trim()===t(name) || el.getAttribute('aria-label')===t(name)));
 const waitFor=async(condition,message,stable=0)=>{
  const end=Date.now()+7000;let since=0;
  while(Date.now()<end){
@@ -80,7 +83,7 @@ document.querySelector('#run').onclick=async()=>{
   pass('latest chapter intent wins');
   button('TOC').click();await waitFor(()=>button('Unavailable section'),'TOC open');
   button('Unavailable section').click();
-  await waitFor(()=>document.querySelector('[role="status"]')?.textContent.includes('could not be opened')&&chapter('Chapter 2: Starting Over'),'Invalid target feedback',400);
+  await waitFor(()=>document.querySelector('[role="status"]')?.textContent.includes(t('This EPUB section could not be opened.'))&&chapter('Chapter 2: Starting Over'),'Invalid target feedback',400);
   pass('unavailable section gives feedback without losing content');
   await tocJump('Section 1.1.1: Deep target','Chapter 1: Starting Up','deep');
   const saved=position();

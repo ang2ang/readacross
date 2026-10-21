@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useEffect, useId, useRef, useState } from 'react';
 
 interface ConfirmDialogProps {
@@ -10,6 +11,7 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ title, description, confirmLabel, onConfirm, onClose, returnFocus }: ConfirmDialogProps) {
+    const { t } = useI18n();
     const dialog = useRef<HTMLDialogElement>(null);
     const titleId = useId();
     const descriptionId = useId();
@@ -49,12 +51,12 @@ export function ConfirmDialog({ title, description, confirmLabel, onConfirm, onC
         }}>
             <h2 id={titleId} className="text-base font-semibold">{title}</h2>
             <p id={descriptionId} className="mt-2 break-words text-sm text-slate-500">{description}</p>
-            {error && <p role="alert" className="mt-3 text-xs text-red-600">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-xs text-red-600">{t(error)}</p>}
             <div className="mt-5 flex justify-end gap-2">
                 <button type="button" autoFocus disabled={pending} onClick={cancel}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50">Cancel</button>
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50">{t("Cancel")}</button>
                 <button type="submit" disabled={pending}
-                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50">{pending ? 'Deleting…' : confirmLabel}</button>
+                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50">{pending ? t("Deleting…") : confirmLabel}</button>
             </div>
         </form>
     </dialog>;

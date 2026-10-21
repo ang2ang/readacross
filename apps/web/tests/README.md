@@ -6,11 +6,16 @@ No additional production or test dependencies are required. Use Node 20+ and the
 
 ```sh
 node --test apps/web/tests/reading.test.cjs
+node --test apps/web/tests/language.test.cjs
 pnpm --filter @readacross/web build
 pnpm --filter @readacross/web lint
 ```
 
 The Node checks cover file fingerprints, complete-match cache keys, retention boundaries (10 days / 5 originals / 100 MiB), source ordering, sidebar bounds, PDF zoom/viewport anchors, document isolation, stale async completions, deletion, unavailable storage, failed commits, temporary source jumps, and generation metadata in Markdown.
+
+Language checks cover all seven UI languages, native option names, complete translation catalogs and interpolation values, persistence through the actual settings store, manual target overrides, legacy settings, invalid preferences, and localized labels/locations. The home language selector changes the interface immediately; Settings contains only the target-language selector. Both selectors use the same native names: 简体中文, English, 日本語, Français, Deutsch, Português, 繁體中文. Changing the UI language selects English for either Chinese UI and Simplified Chinese for other UI languages; a manual target choice remains saved across reloads.
+
+Verified: all 40 Node checks passed. All seven UI language choices survived browser reloads and selected the expected default target. The target-language list matched the home selector in every language, and Settings no longer contained the duplicate interface-language block. Both language controls used a gray focus border without the blue outline/glow. All seven languages kept the home controls within the 390px view. All 8 PDF link and 22 EPUB navigation checks also passed with the Chinese interface in the earlier verification.
 
 ## Native IndexedDB
 

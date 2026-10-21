@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n/useI18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -15,6 +16,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.m
 type PDFDocument = Parameters<NonNullable<ComponentProps<typeof Document>['onLoadSuccess']>>[0];
 
 export function PDFViewer({ fontSize = 100 }: { fontSize?: number }) {
+    const { t } = useI18n();
     const file = useFileStore(state => state.file);
     const ready = useReadingStore(state => state.ready);
     const fitWidth = useReadingStore(state => state.pdfFitWidth);
@@ -226,17 +228,17 @@ export function PDFViewer({ fontSize = 100 }: { fontSize?: number }) {
     const userInput = () => { if (!programmatic.current) useReadingStore.getState().userNavigated(); };
     return <div className="flex flex-col h-full w-full min-w-0 bg-slate-100">
         <div className="flex flex-wrap items-center justify-center gap-2 py-2 px-2 bg-white border-b border-slate-200 shrink-0">
-            <button disabled={!pdf || pageNumber <= 1} onClick={() => goToPage(page.current - 1)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"><ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline">Previous</span></button>
-            <input aria-label="Page number" type="number" min={1} max={pdf?.numPages || 1} value={pageNumber} onChange={event => { const value = Number(event.target.value); if (pdf && value >= 1 && value <= pdf.numPages) goToPage(value); }} className="w-14 text-center text-sm border border-slate-200 rounded py-1" />
+            <button disabled={!pdf || pageNumber <= 1} onClick={() => goToPage(page.current - 1)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"><ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline">{t("Previous")}</span></button>
+            <input aria-label={t("Page number")} type="number" min={1} max={pdf?.numPages || 1} value={pageNumber} onChange={event => { const value = Number(event.target.value); if (pdf && value >= 1 && value <= pdf.numPages) goToPage(value); }} className="w-14 text-center text-sm border border-slate-200 rounded py-1" />
             <span className="text-sm text-slate-400">/ {pdf?.numPages || '…'}</span>
-            <button disabled={!pdf || pageNumber >= pdf.numPages} onClick={() => goToPage(page.current + 1)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"><span className="hidden sm:inline">Next</span><ChevronRight className="w-4 h-4" /></button>
-            <button onClick={() => useReadingStore.getState().fitPdfWidth()} aria-pressed={fitWidth} className={`ml-2 px-2 py-1.5 border rounded text-xs ${fitWidth ? 'border-blue-200 bg-blue-50 text-blue-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>Fit width</button>
+            <button disabled={!pdf || pageNumber >= pdf.numPages} onClick={() => goToPage(page.current + 1)} className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"><span className="hidden sm:inline">{t("Next")}</span><ChevronRight className="w-4 h-4" /></button>
+            <button onClick={() => useReadingStore.getState().fitPdfWidth()} aria-pressed={fitWidth} className={`ml-2 px-2 py-1.5 border rounded text-xs ${fitWidth ? 'border-blue-200 bg-blue-50 text-blue-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{t("Fit width")}</button>
         </div>
-        {linkNotice && <p role="status" className="shrink-0 px-4 py-2 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">{linkNotice}</p>}
+        {linkNotice && <p role="status" className="shrink-0 px-4 py-2 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">{t(linkNotice)}</p>}
         <div ref={scroll} className="flex-1 min-h-0 overflow-auto p-6" onClickCapture={followNamedLink} onWheel={userInput} onTouchStart={userInput} onPointerDown={userInput}
             onScroll={() => { if (!programmatic.current && restored.current) { lastLocation.current = getLocation(); useReadingStore.getState().reportPosition(lastLocation.current); } }}>
             <div className="w-fit mx-auto">
-                <Document file={file} onLoadSuccess={setPdf} loading={<div className="p-10 text-slate-500">Loading PDF…</div>} error={<div className="p-10 text-red-600">Failed to load PDF. Please select the file again.</div>}
+                <Document file={file} onLoadSuccess={setPdf} loading={<div className="p-10 text-slate-500">{t("Loading PDF…")}</div>} error={<div className="p-10 text-red-600">{t("Failed to load PDF. Please select the file again.")}</div>}
                     onItemClick={({ pageNumber: target }) => { if (target) linkNavigation.current?.(target); }}>
                     <div ref={paper} className="relative shadow-lg bg-white" style={{ width }}>
                         <Page pageNumber={pageNumber} width={width} renderTextLayer renderAnnotationLayer
