@@ -1,8 +1,6 @@
 # ReadAcross
 
-<p align="center">
-  <img src="apps/web/public/favicon.png" alt="ReadAcross logo" width="80" />
-</p>
+![ReadAcross logo](apps/extension/assets/icon128.png)
 
 **English** | [简体中文](README.zh-CN.md)
 
