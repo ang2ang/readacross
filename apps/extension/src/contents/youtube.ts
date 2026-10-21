@@ -17,7 +17,12 @@ const inProgressRequests = new Set<string>()
 let isTranslationActive = false
 let currentVideoId = ""
 let subtitleObserver: MutationObserver | null = null
+let observedCaptionContainer: Element | null = null
 let renderLoopId: number | null = null
+let renderTimeout: ReturnType<typeof setTimeout> | null = null
+let activationTimeout: ReturnType<typeof setTimeout> | null = null
+let pendingCaptionReload: HTMLButtonElement | null = null
+let activationGeneration = 0
 let healthCheckInterval: ReturnType<typeof setInterval> | null = null
 let lastRenderedText = ""
 
@@ -40,6 +45,11 @@ let targetCue: HTMLElement | null = null
 
 function normalizeText(text: string): string {
   return text.replace(/[\n\r]/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function getPlayerElement(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("#movie_player")
+    || document.querySelector<HTMLElement>(".html5-video-player")
 }
 
 // =============================================================================
@@ -95,14 +105,16 @@ const SHADOW_STYLES = `
 `
 
 function ensureOverlay(): boolean {
-  if (overlayHost && overlayHost.isConnected && shadowRoot && sourceCue && targetCue) {
+  if (overlayHost?.isConnected && overlayHost.parentElement === getPlayerElement()
+    && shadowRoot && sourceCue && targetCue) {
     return true
   }
 
-  const player = document.querySelector(".html5-video-player") as HTMLElement
+  const player = getPlayerElement()
   if (!player) return false
 
   destroyOverlay()
+  lastRenderedText = ""
 
   overlayHost = document.createElement("div")
   overlayHost.id = "readacross-caption-window"
@@ -142,11 +154,15 @@ function destroyOverlay() {
   shadowRoot = null
   sourceCue = null
   targetCue = null
+  restoreNativeCC()
 }
 
 function updateCues(source: string, target: string) {
   if (sourceCue) sourceCue.textContent = source
   if (targetCue) targetCue.textContent = target
+  // Keep native captions visible until our replacement has something to show.
+  if (source && overlayHost?.isConnected) hideNativeCC()
+  else restoreNativeCC()
 }
 
 function clearCues() {
@@ -169,7 +185,8 @@ function hideNativeCC() {
       pointer-events: none !important;
     }
   `
-  document.head.appendChild(style)
+  const parent = document.head || document.documentElement
+  parent?.appendChild(style)
 }
 
 function restoreNativeCC() {
@@ -210,33 +227,38 @@ async function triggerTranslation(rawText: string): Promise<string | null> {
 
 let interceptorInstalled = false
 
+// Register once, including when an interceptor injection needs to be retried.
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return
+  if (event.data?.type !== "readacross-caption-intercepted") return
+  const { body, url } = event.data
+  if (typeof body !== "string" || !body || !isTranslationActive) return
+  try {
+    const videoId = new URL(url, window.location.href).searchParams.get("v")
+    if (videoId && videoId !== currentVideoId) return
+  } catch {
+    return
+  }
+
+  // Parse based on format
+  let cues: TimedCue[] = []
+  if (body.includes("wireMagic") || body.startsWith("{")) {
+    // JSON3 format (YouTube's default for player)
+    cues = parseJSON3Captions(body)
+  } else if (body.includes("<text") || body.includes("<timedtext")) {
+    // XML format
+    cues = parseTranscriptXML(body)
+  }
+
+  if (cues.length > 0 && !transcriptReady) {
+    transcriptReady = true
+    timedCues = cues
+    batchTranslateAllCues().catch(() => { })
+  }
+})
+
 async function setupCaptionInterceptor(): Promise<void> {
   if (interceptorInstalled) return
-
-  // Listen for intercepted caption data from MAIN world
-  window.addEventListener("message", (event) => {
-    if (event.data?.type !== "readacross-caption-intercepted") return
-    const { body, url, source } = event.data
-    if (!body || !isTranslationActive) return
-
-
-
-    // Parse based on format
-    let cues: TimedCue[] = []
-    if (body.includes("wireMagic") || body.startsWith("{")) {
-      // JSON3 format (YouTube's default for player)
-      cues = parseJSON3Captions(body)
-    } else if (body.includes("<text") || body.includes("<timedtext")) {
-      // XML format (srv3)
-      cues = parseTranscriptXML(body)
-    }
-
-    if (cues.length > 0 && !transcriptReady) {
-      transcriptReady = true
-      timedCues = cues
-      batchTranslateAllCues().catch(() => { })
-    }
-  })
 
   // Ask background to inject XHR/fetch interceptor into MAIN world
   try {
@@ -434,7 +456,7 @@ async function batchTranslateAllCues() {
 // =============================================================================
 
 function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector("video.html5-main-video") as HTMLVideoElement | null
+  return getPlayerElement()?.querySelector<HTMLVideoElement>("video.html5-main-video") || null
 }
 
 function findCueAtTime(timeMs: number): TimedCue | null {
@@ -497,7 +519,10 @@ function startRenderLoop() {
     // When paused: check less often (catch translation arrivals)
     // When playing: check every frame
     if (video.paused) {
-      setTimeout(() => { renderLoopId = requestAnimationFrame(tick) }, 500)
+      renderTimeout = setTimeout(() => {
+        renderTimeout = null
+        renderLoopId = requestAnimationFrame(tick)
+      }, 500)
     } else {
       renderLoopId = requestAnimationFrame(tick)
     }
@@ -507,6 +532,10 @@ function startRenderLoop() {
 }
 
 function stopRenderLoop() {
+  if (renderTimeout !== null) {
+    clearTimeout(renderTimeout)
+    renderTimeout = null
+  }
   if (renderLoopId) {
     cancelAnimationFrame(renderLoopId)
     renderLoopId = null
@@ -515,8 +544,8 @@ function stopRenderLoop() {
 
 // Fallback: read native CC text and translate on-the-fly
 function renderFromNativeCC() {
-  const segments = document.querySelectorAll(".ytp-caption-segment")
-  if (segments.length === 0) {
+  const segments = getPlayerElement()?.querySelectorAll(".ytp-caption-segment")
+  if (!segments || segments.length === 0) {
     if (lastRenderedText !== "") {
       lastRenderedText = ""
       clearCues()
@@ -561,40 +590,25 @@ function renderFromNativeCC() {
 // Subtitle observation (triggers render & keeps native CC alive)
 // =============================================================================
 
+function observeCaptionContainer() {
+  const container = getPlayerElement()?.querySelector(".ytp-caption-window-container") || null
+  if (container === observedCaptionContainer) return
+
+  subtitleObserver?.disconnect()
+  subtitleObserver = null
+  observedCaptionContainer = container
+  if (!container) return
+
+  subtitleObserver = new MutationObserver(() => {
+    if (isTranslationActive && !transcriptReady) renderFromNativeCC()
+  })
+  subtitleObserver.observe(container, { childList: true, subtree: true, characterData: true })
+}
+
 function startObserving() {
-  // NOTE: CC toggle is done in activate() AFTER interceptor is installed.
-  // Do NOT toggle CC here — the interceptor must be ready first.
-
-  const attach = () => {
-    if (!isTranslationActive) return
-    const container = document.querySelector(".ytp-caption-window-container")
-    if (!container) {
-      setTimeout(attach, 600)
-      return
-    }
-
-    hideNativeCC()
-
-    // Observer is now just a trigger to keep native CC DOM alive
-    // (YouTube stops generating subtitle data if CC container is fully removed)
-    subtitleObserver = new MutationObserver(() => {
-      if (!isTranslationActive) return
-      // If transcript is NOT ready, also trigger fallback render
-      if (!transcriptReady) {
-        renderFromNativeCC()
-      }
-    })
-
-    subtitleObserver.observe(container, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    })
-
-    startHealthCheck()
-  }
-
-  attach()
+  observeCaptionContainer()
+  // Start even if YouTube hasn't created its caption container yet.
+  startHealthCheck()
 }
 
 function stopObserving() {
@@ -602,6 +616,7 @@ function stopObserving() {
     subtitleObserver.disconnect()
     subtitleObserver = null
   }
+  observedCaptionContainer = null
   stopHealthCheck()
   stopRenderLoop()
   lastRenderedText = ""
@@ -618,21 +633,11 @@ function startHealthCheck() {
       stopHealthCheck()
       return
     }
-    ensureOverlay()
-    hideNativeCC()
-
-    const container = document.querySelector(".ytp-caption-window-container")
-    if (container && !subtitleObserver) {
-      subtitleObserver = new MutationObserver(() => {
-        if (!isTranslationActive) return
-        if (!transcriptReady) renderFromNativeCC()
-      })
-      subtitleObserver.observe(container, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      })
+    if (!overlayHost?.isConnected || overlayHost.parentElement !== getPlayerElement()) {
+      void activate()
+      return
     }
+    observeCaptionContainer()
   }, 1000)
 }
 
@@ -647,7 +652,54 @@ function stopHealthCheck() {
 // Main activation / deactivation
 // =============================================================================
 
+function clearActivationTimeout() {
+  if (activationTimeout !== null) {
+    clearTimeout(activationTimeout)
+    activationTimeout = null
+  }
+  // If a reload was interrupted between off/on, restore the original CC state.
+  if (pendingCaptionReload?.isConnected
+    && pendingCaptionReload.getAttribute("aria-pressed") !== "true") {
+    pendingCaptionReload.click()
+  }
+  pendingCaptionReload = null
+}
+
+function isCurrentActivation(generation: number): boolean {
+  return isTranslationActive && generation === activationGeneration
+    && new URLSearchParams(window.location.search).get("v") === currentVideoId
+}
+
+function enableNativeCaptions(generation: number) {
+  if (!isCurrentActivation(generation)) return
+  const ccBtn = getPlayerElement()?.querySelector<HTMLButtonElement>(".ytp-subtitles-button")
+  // The redesigned player can mount controls before caption metadata is ready.
+  if (!ccBtn || ccBtn.disabled || ccBtn.getAttribute("aria-disabled") === "true"
+    || !ccBtn.hasAttribute("aria-pressed")) {
+    activationTimeout = setTimeout(() => enableNativeCaptions(generation), 500)
+    return
+  }
+
+  const wasEnabled = ccBtn.getAttribute("aria-pressed") === "true"
+  ccBtn.click()
+  if (wasEnabled) {
+    pendingCaptionReload = ccBtn
+    // Re-fetch captions, but never let a stale activation toggle a new player.
+    activationTimeout = setTimeout(() => {
+      activationTimeout = null
+      pendingCaptionReload = null
+      if (!isCurrentActivation(generation)) return
+      if (!ccBtn.isConnected) enableNativeCaptions(generation)
+      else if (ccBtn.getAttribute("aria-pressed") !== "true") ccBtn.click()
+    }, 300)
+  }
+}
+
 async function activate() {
+  const generation = ++activationGeneration
+  clearActivationTimeout()
+  stopObserving()
+  if (!isTranslationActive) return
   const urlParams = new URLSearchParams(window.location.search)
   const videoId = urlParams.get("v")
   if (!videoId) return
@@ -660,7 +712,9 @@ async function activate() {
   }
 
   if (!ensureOverlay()) {
-    setTimeout(activate, 800)
+    activationTimeout = setTimeout(() => {
+      if (isCurrentActivation(generation)) void activate()
+    }, 800)
     return
   }
 
@@ -674,24 +728,12 @@ async function activate() {
   // The interceptor monkey-patches XHR/fetch in MAIN world to read responses
 
   await setupCaptionInterceptor()
-
-  // Force CC on to make YouTube player fetch captions
-  // (the interceptor will capture the response automatically)
-  const ccBtn = document.querySelector(".ytp-subtitles-button") as HTMLButtonElement
-  if (ccBtn && ccBtn.getAttribute("aria-pressed") !== "true") {
-    ccBtn.click()
-
-  } else if (ccBtn && ccBtn.getAttribute("aria-pressed") === "true") {
-    // CC already on — player may have already fetched captions before interceptor was installed
-    // Toggle CC off-on to force a re-fetch
-    ccBtn.click()
-    await new Promise(r => setTimeout(r, 300))
-    ccBtn.click()
-
-  }
+  enableNativeCaptions(generation)
 }
 
 function deactivate() {
+  activationGeneration++
+  clearActivationTimeout()
   stopObserving()
   destroyOverlay()
   restoreNativeCC()
@@ -720,7 +762,7 @@ function updateYtIconColor(btn: HTMLElement, active: boolean) {
 
 function injectTranslationButton() {
   if (document.getElementById("readacross-yt-btn")) return
-  const rightControls = document.querySelector(".ytp-right-controls")
+  const rightControls = getPlayerElement()?.querySelector(".ytp-right-controls")
   if (!rightControls) {
     setTimeout(injectTranslationButton, 1500)
     return
@@ -763,6 +805,7 @@ function injectTranslationButton() {
   } else {
     rightControls.prepend(btn)
   }
+  updateYtIconColor(btn, isTranslationActive)
 }
 
 // =============================================================================
@@ -794,12 +837,16 @@ const btnObserver = new MutationObserver(() => {
     }
   }
 })
-btnObserver.observe(document.getElementById("movie_player") || document.body, { childList: true, subtree: true })
+// YouTube can replace the entire player during navigation and layout changes.
+btnObserver.observe(document.documentElement, { childList: true, subtree: true })
 
 window.addEventListener("yt-navigate-finish", () => {
   currentVideoId = ""
   deactivate()
-  setTimeout(() => {
+  const generation = activationGeneration
+  activationTimeout = setTimeout(() => {
+    activationTimeout = null
+    if (generation !== activationGeneration) return
     injectTranslationButton()
     if (isTranslationActive) activate()
   }, 1000)
